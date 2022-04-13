@@ -340,6 +340,8 @@ void BlenderSync::sync_integrator(BL::ViewLayer &b_view_layer, bool background)
     integrator->set_motion_blur(view_layer.use_motion_blur);
   }
 
+  integrator->set_use_light_tree(get_boolean(cscene, "use_light_tree"));
+  integrator->set_splitting_threshold(get_float(cscene, "splitting_threshold"));
   integrator->set_light_sampling_threshold(get_float(cscene, "light_sampling_threshold"));
 
   SamplingPattern sampling_pattern = (SamplingPattern)get_enum(

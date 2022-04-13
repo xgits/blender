@@ -49,6 +49,8 @@ class AddPresetSampling(AddPresetBase, Operator):
         "cycles.samples",
         "cycles.adaptive_threshold",
         "cycles.adaptive_min_samples",
+        "cycles.use_light_tree",
+        "cycles.splitting_threshold",
         "cycles.time_limit",
         "cycles.use_denoising",
         "cycles.denoiser",

@@ -471,6 +471,19 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default='MULTIPLE_IMPORTANCE_SAMPLING',
     )
 
+    use_light_tree: BoolProperty(
+        name="Light Tree",
+        description="Samples many lights more efficiently",
+        default=False,
+    )
+
+    splitting_threshold: FloatProperty(
+        name="Splitting",
+        description="Amount of lights to sample at a time, from one light at 0.0, to adaptively more lights as needed, to all lights at 1.0",
+        min=0.0, max=1.0,
+        default=0.85,
+    )
+
     min_light_bounces: IntProperty(
         name="Min Light Bounces",
         description="Minimum number of light bounces. Setting this higher reduces noise in the first bounces, "

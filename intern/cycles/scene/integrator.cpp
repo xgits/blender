@@ -84,7 +84,9 @@ NODE_DEFINE(Integrator)
   SOCKET_FLOAT(adaptive_threshold, "Adaptive Threshold", 0.01f);
   SOCKET_INT(adaptive_min_samples, "Adaptive Min Samples", 0);
 
-  SOCKET_FLOAT(light_sampling_threshold, "Light Sampling Threshold", 0.01f);
+  SOCKET_FLOAT(light_sampling_threshold, "Light Sampling Threshold", 0.05f);
+  SOCKET_BOOLEAN(use_light_tree, "Use light tree to optimize many light sampling", false);
+  SOCKET_FLOAT(splitting_threshold, "Splitting threshold (NEED EDITING)", 0.85f);
 
   static NodeEnum sampling_pattern_enum;
   sampling_pattern_enum.insert("sobol", SAMPLING_PATTERN_SOBOL);

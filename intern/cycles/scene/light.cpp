@@ -24,6 +24,8 @@
 #include "util/progress.h"
 #include "util/task.h"
 
+#include <iostream>
+
 CCL_NAMESPACE_BEGIN
 
 static void shade_background_pixels(Device *device,
@@ -389,6 +391,7 @@ void LightManager::device_update_distribution(Device *,
   }
 
   float trianglearea = totarea;
+  std::cout << "TOTAL AREA: " << trianglearea << std::endl;
   /* point lights */
   bool use_lamp_mis = false;
   int light_index = 0;

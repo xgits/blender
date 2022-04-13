@@ -71,6 +71,7 @@ DeviceScene::DeviceScene(Device *device)
       lights(device, "__lights", MEM_GLOBAL),
       light_background_marginal_cdf(device, "__light_background_marginal_cdf", MEM_GLOBAL),
       light_background_conditional_cdf(device, "__light_background_conditional_cdf", MEM_GLOBAL),
+      light_tree(device, "__light_tree", MEM_GLOBAL),
       particles(device, "__particles", MEM_GLOBAL),
       svm_nodes(device, "__svm_nodes", MEM_GLOBAL),
       shaders(device, "__shaders", MEM_GLOBAL),

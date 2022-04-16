@@ -31,6 +31,7 @@ OrientationBounds merge(const OrientationBounds& cone_a,
   float theta_e = fmaxf(a->theta_e, b->theta_e);
 
   /* Return axis and theta_o of a if it already contains b. */
+  /* This should also be called when b is empty. */
   if (a->theta_o >= fminf(M_PI_F, theta_d + b->theta_o)) {
     return OrientationBounds({a->axis, a->theta_o, theta_e});
   }
@@ -186,10 +187,12 @@ void split_saoh(const BoundBox &centroid_bbox,
     BoundBox bbox_L, bbox_R;
     OrientationBounds bcone_L, bcone_R;
     for (int i = 0; i < num_buckets - 1; i++) {
-      bbox_L = BoundBox::empty;
-      bbox_R = BoundBox::empty;
       energy_L = 0;
       energy_R = 0;
+      bbox_L = BoundBox::empty;
+      bbox_R = BoundBox::empty;
+      bcone_L = OrientationBounds::empty;
+      bconee_R = OrientationBounds::empty;
     }
   }
   
@@ -197,12 +200,12 @@ void split_saoh(const BoundBox &centroid_bbox,
 
 float LightTree::calculate_split_cost()
 {
-    // 
+  return 0.0;
 }
 
 int LightTree::flatten_tree()
 {
-
+  return 1;
 }
 
 CCL_NAMESPACE_END

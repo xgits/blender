@@ -98,6 +98,11 @@ static UVBorderVert *sharpest_border_vert(UVIsland &island)
 
 struct FanTri {
   int64_t v[3];
+  float2 uvs[3];
+
+  struct {
+    bool found : 1;
+  } flags;
 };
 
 struct Fan {
@@ -109,14 +114,14 @@ static void print(const Fan &fan, const MVert *mvert)
   for (const FanTri &tri : fan.tris) {
     for (int i = 0; i < 3; i++) {
       float3 co1 = mvert[tri.v[i]].co;
-      printf("%d(%f,%f,%f) ", tri.v[i], co1.x, co1.y, co1.z);
+      printf("%d(%f,%f,%f, %f,%f) ", tri.v[i], co1.x, co1.y, co1.z, tri.uvs[i].x, tri.uvs[i].y);
     }
-    printf("\n");
+    printf(" %d\n", tri.flags.found);
   }
 }
 
 static void extend_at_vert(UVIsland &island,
-                           UVBorderVert &vert,
+                           const UVBorderVert &vert,
                            const MLoopTri *looptris,
                            const int64_t looptri_len,
                            const MLoop *mloop,
@@ -131,6 +136,7 @@ static void extend_at_vert(UVIsland &island,
     for (int i = 0; i < 3; i++) {
       if (mloop[tri.tri[i]].v == v) {
         FanTri fantri;
+        fantri.flags.found = false;
         fantri.v[0] = mloop[tri.tri[0]].v;
         fantri.v[1] = mloop[tri.tri[1]].v;
         fantri.v[2] = mloop[tri.tri[2]].v;
@@ -167,13 +173,67 @@ static void extend_at_vert(UVIsland &island,
     }
   }
   print(fan, mvert);
+  /* update the known uv coordinates. */
+  for (FanTri &tri : fan.tris) {
+    tri.flags.found = false;
+    int2 test_edge(tri.v[0], tri.v[1]);
+    for (UVPrimitive &prim : island.primitives) {
+      for (UVEdge &edge : prim.edges) {
+        int2 o(mloop[edge.vertices[0].loop].v, mloop[edge.vertices[1].loop].v);
+        if ((test_edge.x == o.x && test_edge.y == o.y) ||
+            (test_edge.x == o.y && test_edge.y == o.x)) {
+          tri.uvs[0] = vert.uv;
+          for (int i = 0; i < 2; i++) {
+            if (edge.vertices[0].uv == vert.uv) {
+              tri.uvs[1] = edge.vertices[1 - i].uv;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+  fan.tris[fan.tris.size() - 1].uvs[2] = fan.tris[0].uvs[1];
+  for (int i = 0; i < fan.tris.size() - 1; i++) {
+    fan.tris[i].uvs[2] = fan.tris[i + 1].uvs[1];
+  }
 
   // add all verts that arent connected to the given border vert to the UVIsland.
+  for (FanTri &tri : fan.tris) {
+    tri.flags.found = false;
+    int2 test_edge(tri.v[0], tri.v[1]);
+    for (UVPrimitive &prim : island.primitives) {
+      for (UVEdge &edge : prim.edges) {
+        if (edge.vertices[0].uv == vert.uv || edge.vertices[1].uv == vert.uv) {
+          int2 o(mloop[edge.vertices[0].loop].v, mloop[edge.vertices[1].loop].v);
+          if ((test_edge.x == o.x && test_edge.y == o.y) ||
+              (test_edge.x == o.y && test_edge.y == o.x)) {
+            tri.flags.found = true;
+          }
+        }
+      }
+    }
+  }
+  print(fan, mvert);
   // tag them as being 'not fixed in uv space'. count them and determine a position in uv space.
   // add UV primitives for them.
   // recalc the border.
+  int num_to_add = 0;
+  for (FanTri &tri : fan.tris) {
+    if (!tri.flags.found) {
+      num_to_add++;
+    }
+  }
+  printf("Found %d new edges to add\n", num_to_add);
+  float angle = island.borders[vert.border_index].outside_angle(vert);
+  printf("Angle %f\n", angle);
 
-
+  switch (num_to_add) {
+    case 1:
+      break;
+    default:
+      break;
+  }
 
   // count fan-sections between border edges.
   // 0 : split in half.
@@ -196,6 +256,11 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
 #endif
 
   while (true) {
+    int64_t border_index = 0;
+    for (UVBorder &border : borders) {
+      border.update_indexes(border_index++);
+    }
+
     UVBorderVert *extension_vert = sharpest_border_vert(*this);
     if (extension_vert == nullptr) {
       break;
@@ -270,6 +335,18 @@ float UVBorder::outside_angle(const UVBorderVert &vert) const
   // TODO: need detection if the result is inside or outside.
   // return angle_v2v2v2(prev.uv, vert.uv, next.uv);
   return M_PI - angle_signed_v2v2(vert.uv - prev.uv, next.uv - vert.uv);
+}
+
+void UVBorder::update_indexes(uint64_t border_index)
+{
+  for (int64_t i = 0; i < verts.size(); i++) {
+    int64_t prev = (i - 1 + verts.size()) % verts.size();
+    int64_t next = (i + 1) % verts.size();
+    verts[i].prev_index = prev;
+    verts[i].index = i;
+    verts[i].next_index = next;
+    verts[i].border_index = border_index;
+  }
 }
 
 /** \} */

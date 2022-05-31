@@ -100,6 +100,12 @@ struct UVBorderVert {
   /* Index of this vert in the vertices of the original mesh. */
   int64_t vert;
 
+  /* Indexes of connected border verts. */
+  int64_t index;
+  int64_t prev_index;
+  int64_t next_index;
+  int64_t border_index;
+
   struct {
     /** Should this vertex still be checked when performing extension. */
     bool extendable : 1;
@@ -134,6 +140,8 @@ struct UVBorder {
    * Calculate the outside angle of the given vert.
    */
   float outside_angle(const UVBorderVert &vert) const;
+
+  void update_indexes(uint64_t border_index);
 };
 
 struct UVIsland {

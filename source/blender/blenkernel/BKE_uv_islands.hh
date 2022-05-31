@@ -156,7 +156,8 @@ struct UVIsland {
                      const short island_index,
                      const MLoopTri *looptris,
                      const int64_t looptri_len,
-                     const MLoop *mloop);
+                     const MLoop *mloop,
+                     const MVert *mvert);
 
  private:
   void append(const UVPrimitive &primitive)
@@ -230,6 +231,7 @@ struct UVIsland {
 
 /* Debug functions to export to a SVG file. */
 void svg_header(std::ostream &ss);
+void svg(std::ostream &ss, const UVIsland &islands, int step);
 void svg(std::ostream &ss, const UVIslands &islands, int step);
 void svg(std::ostream &ss, const UVPrimitive &primitive, int step);
 void svg(std::ostream &ss, const UVIslandsMask &mask, int step);
@@ -266,11 +268,12 @@ struct UVIslands {
   void extend_borders(const UVIslandsMask &islands_mask,
                       const MLoopTri *looptris,
                       const int64_t looptri_len,
-                      const MLoop *mloop)
+                      const MLoop *mloop,
+                      const MVert *mvert)
   {
     ushort index = 0;
     for (UVIsland &island : islands) {
-      island.extend_border(islands_mask, index++, looptris, looptri_len, mloop);
+      island.extend_border(islands_mask, index++, looptris, looptri_len, mloop, mvert);
     }
 
 #ifdef DEBUG_SVG

@@ -104,11 +104,23 @@ struct Fan {
   Vector<FanTri> tris;
 };
 
+static void print(const Fan &fan, const MVert *mvert)
+{
+  for (const FanTri &tri : fan.tris) {
+    for (int i = 0; i < 3; i++) {
+      float3 co1 = mvert[tri.v[i]].co;
+      printf("%d(%f,%f,%f) ", tri.v[i], co1.x, co1.y, co1.z);
+    }
+    printf("\n");
+  }
+}
+
 static void extend_at_vert(UVIsland &island,
                            UVBorderVert &vert,
                            const MLoopTri *looptris,
                            const int64_t looptri_len,
-                           const MLoop *mloop)
+                           const MLoop *mloop,
+                           const MVert *mvert)
 {
   // get the mesh vert.
   int64_t v = vert.vert;
@@ -142,6 +154,27 @@ static void extend_at_vert(UVIsland &island,
     }
   }
 
+  // reorder fan that the segments connect.
+  print(fan, mvert);
+  for (int i = 0; i < fan.tris.size() - 1; i++) {
+    for (int j = i + 1; j < fan.tris.size(); j++) {
+      if (fan.tris[j].v[1] == fan.tris[i].v[2]) {
+        if (i + 1 != j) {
+          std::swap(fan.tris[j], fan.tris[i + 1]);
+        }
+        break;
+      }
+    }
+  }
+  print(fan, mvert);
+
+  // add all verts that arent connected to the given border vert to the UVIsland.
+  // tag them as being 'not fixed in uv space'. count them and determine a position in uv space.
+  // add UV primitives for them.
+  // recalc the border.
+
+
+
   // count fan-sections between border edges.
   // 0 : split in half.
 }
@@ -150,10 +183,18 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
                              const short island_index,
                              const MLoopTri *looptris,
                              const int64_t looptri_len,
-                             const MLoop *mloop)
+                             const MLoop *mloop,
+                             const MVert *mvert)
 {
   // Find sharpest corner that still inside the island mask and can be extended.
   // exit when no corner could be found.
+#ifdef DEBUG_SVG
+  int step = 0;
+  std::ofstream of;
+  of.open("/tmp/extend.svg");
+  svg_header(of);
+#endif
+
   while (true) {
     UVBorderVert *extension_vert = sharpest_border_vert(*this);
     if (extension_vert == nullptr) {
@@ -167,12 +208,20 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
     }
 
     // TODO: extend
-    extend_at_vert(*this, *extension_vert, looptris, looptri_len, mloop);
+    extend_at_vert(*this, *extension_vert, looptris, looptri_len, mloop, mvert);
 
     /* Mark that the vert is extended. Unable to extend twice. */
     extension_vert->flags.extendable = false;
+#ifdef DEBUG_SVG
+    svg(of, *this, step);
+    step++;
+#endif
     break;
   }
+#ifdef DEBUG_SVG
+  svg_footer(of);
+  of.close();
+#endif
 }
 
 /** \} */
@@ -335,6 +384,42 @@ void svg(std::ostream &ss, const UVEdge &edge)
   ss << "       <line x1=\"" << edge.vertices[0].uv.x * 1024 << "\" y1=\""
      << edge.vertices[0].uv.y * 1024 << "\" x2=\"" << edge.vertices[1].uv.x * 1024 << "\" y2=\""
      << edge.vertices[1].uv.y * 1024 << "\"/>\n";
+}
+
+void svg(std::ostream &ss, const UVIsland &island, int step)
+{
+  ss << "<g transform=\"translate(" << step * 1024 << " 0)\">\n";
+  ss << "  <g fill=\"yellow\">\n";
+
+  /* Inner edges */
+  ss << "    <g stroke=\"grey\" stroke-dasharray=\"5 5\">\n";
+  for (const UVPrimitive &primitive : island.primitives) {
+    for (int i = 0; i < 3; i++) {
+      const UVEdge &edge = primitive.edges[i];
+      if (edge.adjacent_uv_primitive == -1) {
+        continue;
+      }
+      svg(ss, edge);
+    }
+  }
+  ss << "     </g>\n";
+
+  /* Border */
+  ss << "    <g stroke=\"black\" stroke-width=\"2\">\n";
+  for (const UVPrimitive &primitive : island.primitives) {
+    for (int i = 0; i < 3; i++) {
+      const UVEdge &edge = primitive.edges[i];
+      if (edge.adjacent_uv_primitive != -1) {
+        continue;
+      }
+      svg(ss, edge);
+    }
+  }
+  ss << "     </g>\n";
+
+  ss << "   </g>\n";
+
+  ss << "</g>\n";
 }
 
 void svg(std::ostream &ss, const UVIslands &islands, int step)

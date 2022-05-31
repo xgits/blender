@@ -460,6 +460,13 @@ typedef enum eLineartTriangleFlags {
   LRT_TRIANGLE_MAT_BACK_FACE_CULLING = (1 << 5),
 } eLineartTriangleFlags;
 
+#define LRT_SHADOW_MASK_UNDEFINED 0
+#define LRT_SHADOW_MASK_LIT (1 << 0)
+#define LRT_SHADOW_MASK_SHADED (1 << 1)
+#define LRT_SHADOW_MASK_ENCLOSED_SHAPE (1 << 2)
+#define LRT_SHADOW_MASK_INHIBITED (1 << 3)
+#define LRT_SHADOW_SILHOUETTE_ERASED (1 << 4)
+
 /**
  * Controls how many edges a worker thread is processing at one request.
  * There's no significant performance impact on choosing different values.

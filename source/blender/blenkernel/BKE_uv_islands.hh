@@ -28,8 +28,9 @@ struct UVIslandsMask;
 struct UVBorder;
 
 struct UVVertex {
-  /* Loop index of the vertex in the original mesh. */
+  /* Loop index of the loop vertex in the original mesh. */
   uint64_t loop;
+  uint64_t v;
   /* Position in uv space. */
   float2 uv;
 };
@@ -57,7 +58,14 @@ struct UVPrimitive {
   uint64_t index;
   UVEdge edges[3];
 
-  explicit UVPrimitive(uint64_t prim_index, const MLoopTri &tri, const MLoopUV *mloopuv)
+  explicit UVPrimitive(uint64_t prim_index) : index(prim_index)
+  {
+  }
+
+  explicit UVPrimitive(uint64_t prim_index,
+                       const MLoopTri &tri,
+                       const MLoop *mloop,
+                       const MLoopUV *mloopuv)
       : index(prim_index)
   {
     for (int i = 0; i < 3; i++) {
@@ -65,6 +73,8 @@ struct UVPrimitive {
       edges[i].vertices[1].uv = mloopuv[tri.tri[(i + 1) % 3]].uv;
       edges[i].vertices[0].loop = tri.tri[i];
       edges[i].vertices[1].loop = tri.tri[(i + 1) % 3];
+      edges[i].vertices[0].v = mloop[tri.tri[i]].v;
+      edges[i].vertices[1].v = mloop[tri.tri[(i + 1) % 3]].v;
     }
   }
 
@@ -106,6 +116,9 @@ struct UVBorderVert {
   int64_t next_index;
   int64_t border_index;
 
+  /** Index of the uv primitive (UVIsland) */
+  int64_t uv_primitive_index;
+
   struct {
     /** Should this vertex still be checked when performing extension. */
     bool extendable : 1;
@@ -120,8 +133,10 @@ struct UVBorderVert {
 struct UVBorderEdge {
   UVEdge *edge;
   bool tag = false;
+  int64_t uv_prim_index;
 
-  explicit UVBorderEdge(UVEdge *edge) : edge(edge)
+  explicit UVBorderEdge(UVEdge *edge, int64_t uv_prim_index)
+      : edge(edge), uv_prim_index(uv_prim_index)
   {
   }
 };
@@ -241,6 +256,7 @@ struct UVIsland {
 void svg_header(std::ostream &ss);
 void svg(std::ostream &ss, const UVIsland &islands, int step);
 void svg(std::ostream &ss, const UVIslands &islands, int step);
+void svg(std::ostream &ss, const UVPrimitive &primitive);
 void svg(std::ostream &ss, const UVPrimitive &primitive, int step);
 void svg(std::ostream &ss, const UVIslandsMask &mask, int step);
 void svg(std::ostream &ss, const UVBorder &border);
@@ -249,10 +265,13 @@ void svg_footer(std::ostream &ss);
 struct UVIslands {
   Vector<UVIsland> islands;
 
-  explicit UVIslands(const MLoopTri *primitives, uint64_t primitives_len, const MLoopUV *mloopuv)
+  explicit UVIslands(const MLoopTri *primitives,
+                     uint64_t primitives_len,
+                     const MLoop *mloop,
+                     const MLoopUV *mloopuv)
   {
     for (int prim = 0; prim < primitives_len; prim++) {
-      UVPrimitive primitive(prim, primitives[prim], mloopuv);
+      UVPrimitive primitive(prim, primitives[prim], mloop, mloopuv);
       add(primitive);
     }
 

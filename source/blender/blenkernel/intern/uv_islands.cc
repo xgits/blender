@@ -11,11 +11,11 @@ namespace blender::bke::uv_islands {
 void UVIsland::extract_border(const MLoop *mloop)
 {
   Vector<UVBorderEdge> edges;
-
-  for (UVPrimitive &primitive : primitives) {
-    for (UVEdge &edge : primitive.edges) {
+  for (int64_t prim_index = 0; prim_index < primitives.size(); prim_index++) {
+    UVPrimitive &prim = primitives[prim_index];
+    for (UVEdge &edge : prim.edges) {
       if (edge.is_border_edge()) {
-        edges.append(UVBorderEdge(&edge));
+        edges.append(UVBorderEdge(&edge, prim_index));
       }
     }
   }
@@ -99,9 +99,12 @@ static UVBorderVert *sharpest_border_vert(UVIsland &island)
 struct FanTri {
   int64_t v[3];
   float2 uvs[3];
+  /* Index of the primitive in the original mesh. */
+  int64_t prim_index;
 
   struct {
     bool found : 1;
+    bool should_be_added : 1;
   } flags;
 };
 
@@ -121,7 +124,7 @@ static void print(const Fan &fan, const MVert *mvert)
 }
 
 static void extend_at_vert(UVIsland &island,
-                           const UVBorderVert &vert,
+                           UVBorderVert &vert,
                            const MLoopTri *looptris,
                            const int64_t looptri_len,
                            const MLoop *mloop,
@@ -136,6 +139,7 @@ static void extend_at_vert(UVIsland &island,
     for (int i = 0; i < 3; i++) {
       if (mloop[tri.tri[i]].v == v) {
         FanTri fantri;
+        fantri.prim_index = tri_index;
         fantri.flags.found = false;
         fantri.v[0] = mloop[tri.tri[0]].v;
         fantri.v[1] = mloop[tri.tri[1]].v;
@@ -145,6 +149,7 @@ static void extend_at_vert(UVIsland &island,
       }
     }
   }
+  print(fan, mvert);
 
   // Make sure the first vert points to the center of the fan.
   for (FanTri &tri : fan.tris) {
@@ -176,6 +181,7 @@ static void extend_at_vert(UVIsland &island,
   /* update the known uv coordinates. */
   for (FanTri &tri : fan.tris) {
     tri.flags.found = false;
+    tri.flags.should_be_added = false;
     int2 test_edge(tri.v[0], tri.v[1]);
     for (UVPrimitive &prim : island.primitives) {
       for (UVEdge &edge : prim.edges) {
@@ -184,7 +190,7 @@ static void extend_at_vert(UVIsland &island,
             (test_edge.x == o.y && test_edge.y == o.x)) {
           tri.uvs[0] = vert.uv;
           for (int i = 0; i < 2; i++) {
-            if (edge.vertices[0].uv == vert.uv) {
+            if (edge.vertices[i].uv == vert.uv) {
               tri.uvs[1] = edge.vertices[1 - i].uv;
               break;
             }
@@ -225,14 +231,89 @@ static void extend_at_vert(UVIsland &island,
     }
   }
   printf("Found %d new edges to add\n", num_to_add);
-  float angle = island.borders[vert.border_index].outside_angle(vert);
-  printf("Angle %f\n", angle);
 
-  switch (num_to_add) {
-    case 1:
-      break;
-    default:
-      break;
+  if (num_to_add > 0) {
+    UVBorder &border = island.borders[vert.border_index];
+    int i = 0;
+
+    {
+      UVPrimitive test(0);
+      test.edges[0].vertices[0].uv = border.verts[vert.index].uv;
+      test.edges[0].vertices[1].uv = border.verts[vert.next_index].uv;
+      test.edges[1].vertices[0].uv = border.verts[vert.next_index].uv;
+      test.edges[1].vertices[1].uv = border.verts[vert.prev_index].uv;
+      test.edges[2].vertices[0].uv = border.verts[vert.prev_index].uv;
+      test.edges[2].vertices[1].uv = border.verts[vert.index].uv;
+      // island.primitives.append(test);
+      // return;
+    }
+    FanTri *prev_tri = &fan.tris.last();
+    for (int tri_index = 0; tri_index < fan.tris.size(); tri_index++) {
+      FanTri &tri = fan.tris[tri_index];
+      if (tri.flags.found) {
+        prev_tri = &tri;
+        continue;
+      }
+      float factor = float(i + 1) / float(num_to_add + 1);
+      float2 new_pos;
+      interp_v2_v2v2(
+          new_pos, border.verts[vert.prev_index].uv, border.verts[vert.next_index].uv, factor);
+      print_v2_id(new_pos);
+      // TODO change length of edge.
+
+      tri.uvs[1] = new_pos;
+      prev_tri->uvs[2] = new_pos;
+      tri.flags.should_be_added = true;
+      prev_tri->flags.should_be_added = true;
+
+      i++;
+      prev_tri = &tri;
+    }
+    print(fan, mvert);
+
+    for (FanTri &tri : fan.tris) {
+      if (!tri.flags.should_be_added) {
+        continue;
+      }
+      UVPrimitive prim(tri.prim_index);
+      prim.edges[0].vertices[0].uv = tri.uvs[0];
+      prim.edges[0].vertices[1].uv = tri.uvs[1];
+      prim.edges[1].vertices[0].uv = tri.uvs[1];
+      prim.edges[1].vertices[1].uv = tri.uvs[2];
+      prim.edges[2].vertices[0].uv = tri.uvs[2];
+      prim.edges[2].vertices[1].uv = tri.uvs[0];
+
+      // prim.edges[0].adjacent_uv_primitive = prev_tri.uv_prim_index;
+      // prim.edges[1].adjacent_uv_primitive = next_tri.uv_prim_index;
+      island.primitives.append(prim);
+    }
+  }
+  else {
+    // TODO duplicate tris or fill tri.
+    // Currently we only do the duplication.
+    UVBorder &border = island.borders[vert.border_index];
+
+    float2 center_uv = (border.verts[vert.next_index].uv + border.verts[vert.prev_index].uv) /
+                       2.0f;
+    UVPrimitive prim1(0);
+    prim1.edges[0].vertices[0].uv = border.verts[vert.index].uv;
+    prim1.edges[0].vertices[1].uv = border.verts[vert.prev_index].uv;
+    prim1.edges[1].vertices[0].uv = border.verts[vert.prev_index].uv;
+    prim1.edges[1].vertices[1].uv = center_uv;
+    prim1.edges[2].vertices[0].uv = center_uv;
+    prim1.edges[2].vertices[1].uv = border.verts[vert.index].uv;
+    island.primitives.append(prim1);
+
+    UVPrimitive prim2(0);
+    prim2.edges[0].vertices[0].uv = border.verts[vert.index].uv;
+    prim2.edges[0].vertices[1].uv = center_uv;
+    prim2.edges[1].vertices[0].uv = center_uv;
+    prim2.edges[1].vertices[1].uv = border.verts[vert.next_index].uv;
+    prim2.edges[2].vertices[0].uv = border.verts[vert.next_index].uv;
+    prim2.edges[2].vertices[1].uv = border.verts[vert.index].uv;
+    island.primitives.append(prim2);
+
+    vert.uv = center_uv;
   }
 
   // count fan-sections between border edges.
@@ -253,9 +334,11 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
   std::ofstream of;
   of.open("/tmp/extend.svg");
   svg_header(of);
+  svg(of, *this, step++);
 #endif
 
-  while (true) {
+  int i = 5;
+  while (i) {
     int64_t border_index = 0;
     for (UVBorder &border : borders) {
       border.update_indexes(border_index++);
@@ -277,11 +360,10 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
 
     /* Mark that the vert is extended. Unable to extend twice. */
     extension_vert->flags.extendable = false;
+    i--;
 #ifdef DEBUG_SVG
-    svg(of, *this, step);
-    step++;
+    svg(of, *this, step++);
 #endif
-    break;
   }
 #ifdef DEBUG_SVG
   svg_footer(of);
@@ -469,15 +551,9 @@ void svg(std::ostream &ss, const UVIsland &island, int step)
   ss << "  <g fill=\"yellow\">\n";
 
   /* Inner edges */
-  ss << "    <g stroke=\"grey\" stroke-dasharray=\"5 5\">\n";
+  ss << "    <g stroke=\"grey\" stroke-width=\"1\">\n";
   for (const UVPrimitive &primitive : island.primitives) {
-    for (int i = 0; i < 3; i++) {
-      const UVEdge &edge = primitive.edges[i];
-      if (edge.adjacent_uv_primitive == -1) {
-        continue;
-      }
-      svg(ss, edge);
-    }
+    svg(ss, primitive);
   }
   ss << "     </g>\n";
 
@@ -595,6 +671,25 @@ void svg(std::ostream &ss, const UVPrimitive &primitive)
     ss << " ";
   }
   ss << "\"/>\n";
+
+  float2 center(0.0, 0.0);
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 2; j++) {
+      center += primitive.edges[i].vertices[j].uv;
+    }
+  }
+  center /= 3 * 2;
+  ss << "<text x=\"" << center.x * 1024 << "\"";
+  ss << " y=\"" << center.y * 1024 << "\">";
+  ss << primitive.index;
+  ss << "</text>\n";
+  for (int i = 0; i < 3; i++) {
+    float2 co = (center + primitive.edges[i].vertices[0].uv) / 2.0;
+    ss << "<text x=\"" << co.x * 1024 << "\"";
+    ss << " y=\"" << co.y * 1024 << "\">";
+    ss << primitive.edges[i].vertices[0].v;
+    ss << "</text>\n";
+  }
 }
 
 void svg(std::ostream &ss, const UVPrimitive &primitive, int step)

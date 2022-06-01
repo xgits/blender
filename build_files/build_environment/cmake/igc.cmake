@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-# CAUTION: igc requires flex 2.6.4 this is not by default available on centos 7
-
 unpack_only(igc_llvm)
 unpack_only(igc_opencl_clang)
 unpack_only(igc_vcintrinsics)
@@ -21,6 +19,13 @@ set(IGC_EXTRA_ARGS
   -DIGC_OPTION__ARCHITECTURE_TARGET=${IGC_TARGET}
   -DIGC_OPTION__ARCHITECTURE_HOST=${IGC_TARGET}
 )
+
+if(UNIX AND NOT APPLE)
+  list(APPEND IGC_EXTRA_ARGS
+       -DFLEX_EXECUTABLE=${LIBDIR}/flex/bin/flex
+       -DFLEX_INCLUDE_DIR=${LIBDIR}/flex/include
+  )
+endif()
 
 ExternalProject_Add(external_igc
   URL file://${PACKAGE_DIR}/${IGC_FILE}
@@ -77,3 +82,9 @@ add_dependencies(
   external_igc_spirv_translator
 )
 
+if(UNIX AND NOT APPLE)
+  add_dependencies(
+    external_igc
+    external_flex
+  )
+endif()

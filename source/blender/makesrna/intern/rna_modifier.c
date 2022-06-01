@@ -47,7 +47,7 @@
 #include "MOD_nodes.h"
 
 const EnumPropertyItem rna_enum_object_modifier_type_items[] = {
-    {0, "", 0, N_("Modify"), ""},
+    RNA_ENUM_ITEM_HEADING(N_("Modify"), NULL),
     {eModifierType_DataTransfer,
      "DATA_TRANSFER",
      ICON_MOD_DATA_TRANSFER,
@@ -99,7 +99,8 @@ const EnumPropertyItem rna_enum_object_modifier_type_items[] = {
      ICON_MOD_VERTEX_WEIGHT,
      "Vertex Weight Proximity",
      "Set the vertex group weights based on the distance to another target object"},
-    {0, "", 0, N_("Generate"), ""},
+
+    RNA_ENUM_ITEM_HEADING(N_("Generate"), NULL),
     {eModifierType_Array,
      "ARRAY",
      ICON_MOD_ARRAY,
@@ -193,7 +194,8 @@ const EnumPropertyItem rna_enum_object_modifier_type_items[] = {
      ICON_MOD_WIREFRAME,
      "Wireframe",
      "Convert faces into thickened edges"},
-    {0, "", 0, N_("Deform"), ""},
+
+    RNA_ENUM_ITEM_HEADING(N_("Deform"), NULL),
     {eModifierType_Armature,
      "ARMATURE",
      ICON_MOD_ARMATURE,
@@ -272,7 +274,8 @@ const EnumPropertyItem rna_enum_object_modifier_type_items[] = {
      ICON_VOLUME_DATA,
      "Volume Displace",
      "Deform volume based on noise or other vector fields"}, /* TODO: Use correct icon. */
-    {0, "", 0, N_("Physics"), ""},
+
+    RNA_ENUM_ITEM_HEADING(N_("Physics"), NULL),
     {eModifierType_Cloth, "CLOTH", ICON_MOD_CLOTH, "Cloth", ""},
     {eModifierType_Collision, "COLLISION", ICON_MOD_PHYSICS, "Collision", ""},
     {eModifierType_DynamicPaint, "DYNAMIC_PAINT", ICON_MOD_DYNAMICPAINT, "Dynamic Paint", ""},
@@ -722,9 +725,9 @@ static void rna_Modifier_name_set(PointerRNA *ptr, const char *value)
   BKE_animdata_fix_paths_rename_all(NULL, "modifiers", oldname, md->name);
 }
 
-static char *rna_Modifier_path(PointerRNA *ptr)
+static char *rna_Modifier_path(const PointerRNA *ptr)
 {
-  ModifierData *md = ptr->data;
+  const ModifierData *md = ptr->data;
   char name_esc[sizeof(md->name) * 2];
 
   BLI_str_escape(name_esc, md->name, sizeof(name_esc));
@@ -947,10 +950,10 @@ static void rna_HookModifier_subtarget_set(PointerRNA *ptr, const char *value)
   BKE_object_modifier_hook_reset(owner, hmd);
 }
 
-static int rna_HookModifier_vertex_indices_get_length(PointerRNA *ptr,
+static int rna_HookModifier_vertex_indices_get_length(const PointerRNA *ptr,
                                                       int length[RNA_MAX_ARRAY_DIMENSION])
 {
-  HookModifierData *hmd = ptr->data;
+  const HookModifierData *hmd = ptr->data;
   int indexar_num = hmd->indexar ? hmd->indexar_num : 0;
   return (length[0] = indexar_num);
 }
@@ -1366,10 +1369,9 @@ static const EnumPropertyItem *rna_DataTransferModifier_layers_select_src_itemf(
     Object *ob_src = dtmd->ob_source;
 
     if (ob_src) {
-      AttributeDomain domain = STREQ(RNA_property_identifier(prop),
-                                     "layers_vcol_vert_select_src") ?
-                                   ATTR_DOMAIN_POINT :
-                                   ATTR_DOMAIN_CORNER;
+      eAttrDomain domain = STREQ(RNA_property_identifier(prop), "layers_vcol_vert_select_src") ?
+                               ATTR_DOMAIN_POINT :
+                               ATTR_DOMAIN_CORNER;
 
       Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
       Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
@@ -1389,7 +1391,7 @@ static const EnumPropertyItem *rna_DataTransferModifier_layers_select_src_itemf(
         cdata = &me_eval->ldata;
       }
 
-      CustomDataType types[2] = {CD_PROP_COLOR, CD_PROP_BYTE_COLOR};
+      eCustomDataType types[2] = {CD_PROP_COLOR, CD_PROP_BYTE_COLOR};
 
       int idx = 0;
       for (int i = 0; i < 2; i++) {
@@ -1489,7 +1491,7 @@ static const EnumPropertyItem *rna_DataTransferModifier_layers_select_dst_itemf(
       Object *ob_dst = CTX_data_active_object(C); /* XXX Is this OK? */
 
       if (ob_dst && ob_dst->data) {
-        CustomDataType types[2] = {CD_PROP_COLOR, CD_PROP_BYTE_COLOR};
+        eCustomDataType types[2] = {CD_PROP_COLOR, CD_PROP_BYTE_COLOR};
 
         Mesh *me_dst = ob_dst->data;
         CustomData *cdata = STREQ(RNA_property_identifier(prop), "layers_vcol_vert_select_dst") ?

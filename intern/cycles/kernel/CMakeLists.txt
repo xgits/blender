@@ -725,7 +725,6 @@ if(WITH_CYCLES_DEVICE_ONEAPI)
       -fdelayed-template-parsing
       -shared
       -DWITH_ONEAPI
-      -ffast-math
       -DNDEBUG
       -O2
       -o ${cycles_kernel_oneapi_lib}
@@ -742,11 +741,16 @@ if(WITH_CYCLES_DEVICE_ONEAPI)
 
   # Set defaults for spir64 and spir64_gen options
   if (NOT DEFINED CYCLES_ONEAPI_SYCL_OPTIONS_spir64)
-    set(CYCLES_ONEAPI_SYCL_OPTIONS_spir64 "--format zebin -options '-ze-opt-large-register-file -ze-opt-regular-grf-kernel integrator_intersect'")
+    set(CYCLES_ONEAPI_SYCL_OPTIONS_spir64 "-options '-ze-opt-large-register-file -ze-opt-regular-grf-kernel integrator_intersect'")
   endif()
   if (NOT DEFINED CYCLES_ONEAPI_SYCL_OPTIONS_spir64_gen)
-    SET (CYCLES_ONEAPI_SYCL_OPTIONS_spir64_gen "-device ${CYCLES_ONEAPI_SPIR64_GEN_DEVICES} ${CYCLES_ONEAPI_SYCL_OPTIONS_spir64}" CACHE STRING "Extra build options for spir64_gen target")
+    SET (CYCLES_ONEAPI_SYCL_OPTIONS_spir64_gen "${CYCLES_ONEAPI_SYCL_OPTIONS_spir64}" CACHE STRING "Extra build options for spir64_gen target")
   endif()
+  # enabling zebin (graphics binary format with improved compatibility) on Windows only while support on Linux isn't available yet
+  if(WIN32)
+    string(PREPEND CYCLES_ONEAPI_SYCL_OPTIONS_spir64_gen "--format zebin ")
+  endif()
+  string(PREPEND CYCLES_ONEAPI_SYCL_OPTIONS_spir64_gen "-device ${CYCLES_ONEAPI_SPIR64_GEN_DEVICES} ")
 
   if (WITH_CYCLES_ONEAPI_BINARIES)
     # Iterate over all targest and their options
@@ -794,6 +798,11 @@ if(WITH_CYCLES_DEVICE_ONEAPI)
         list(APPEND sycl_compiler_flags -D_GLIBCXX_USE_CXX11_ABI=0)
       endif()
     endif()
+  endif()
+
+  # avoid using -ffast-math for the graphics compiler on CentOS 7 until the compile-time issue it triggers gets fixed.
+  if(WIN32 OR NOT WITH_CYCLES_ONEAPI_BINARIES)
+    list(APPEND sycl_compiler_flags -ffast-math)
   endif()
 
   if(WIN32)

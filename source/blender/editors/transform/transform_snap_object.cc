@@ -168,8 +168,13 @@ struct SnapObjectContext {
 /** \name Utilities
  * \{ */
 
-/* Mesh used for snapping.
- * If nullptr the BMesh should be used. */
+/**
+ * Mesh used for snapping.
+ *
+ * - When the return value is null the `BKE_editmesh_from_object(ob_eval)` should be used.
+ * - In rare cases there is no evaluated mesh available and a null result doesn't imply an
+ *   edit-mesh, so callers need to account for a null edit-mesh too, see: T96536.
+ */
 static const Mesh *mesh_for_snap(Object *ob_eval, eSnapEditType edit_mode_type, bool *r_use_hide)
 {
   const Mesh *me_eval = BKE_object_get_evaluated_mesh(ob_eval);
@@ -998,6 +1003,9 @@ static void raycast_obj_fn(SnapObjectContext *sctx,
       const Mesh *me_eval = mesh_for_snap(ob_eval, edit_mode_type, &use_hide);
       if (me_eval == nullptr) {
         BMEditMesh *em = BKE_editmesh_from_object(ob_eval);
+        if (UNLIKELY(!em)) { /* See #mesh_for_snap doc-string. */
+          return;
+        }
         BLI_assert_msg(em == BKE_editmesh_from_object(DEG_get_original_object(ob_eval)),
                        "Make sure there is only one pointer for looptris");
         retval = raycastEditMesh(sctx,
@@ -2069,11 +2077,14 @@ static short snapCurve(SnapObjectContext *sctx,
                                                  nu->bezt[u].vec[1],
                                                  &dist_px_sq,
                                                  r_loc);
+
             /* Don't snap if handle is selected (moving),
              * or if it is aligning to a moving handle. */
-            is_selected = (!(nu->bezt[u].f1 & SELECT) &&
-                           !(nu->bezt[u].h1 & HD_ALIGN && nu->bezt[u].f3 & SELECT)) != 0;
-            if (!(is_selected && skip_selected)) {
+            bool is_selected_h1 = (nu->bezt[u].f1 & SELECT) != 0;
+            bool is_selected_h2 = (nu->bezt[u].f3 & SELECT) != 0;
+            bool is_autoalign_h1 = (nu->bezt[u].h1 & HD_ALIGN) != 0;
+            bool is_autoalign_h2 = (nu->bezt[u].h2 & HD_ALIGN) != 0;
+            if (!skip_selected || !(is_selected_h1 || (is_autoalign_h1 && is_selected_h2))) {
               has_snap |= test_projected_vert_dist(&neasrest_precalc,
                                                    clip_planes_local,
                                                    clip_plane_len,
@@ -2083,9 +2094,7 @@ static short snapCurve(SnapObjectContext *sctx,
                                                    r_loc);
             }
 
-            is_selected = (!(nu->bezt[u].f3 & SELECT) &&
-                           !(nu->bezt[u].h2 & HD_ALIGN && nu->bezt[u].f1 & SELECT)) != 0;
-            if (!(is_selected && skip_selected)) {
+            if (!skip_selected || !(is_selected_h2 || (is_autoalign_h2 && is_selected_h1))) {
               has_snap |= test_projected_vert_dist(&neasrest_precalc,
                                                    clip_planes_local,
                                                    clip_plane_len,
@@ -2696,6 +2705,9 @@ static void snap_obj_fn(SnapObjectContext *sctx,
       const Mesh *me_eval = mesh_for_snap(ob_eval, edit_mode_type, &use_hide);
       if (me_eval == nullptr) {
         BMEditMesh *em = BKE_editmesh_from_object(ob_eval);
+        if (UNLIKELY(!em)) { /* See #mesh_for_snap doc-string. */
+          return;
+        }
         BLI_assert_msg(em == BKE_editmesh_from_object(DEG_get_original_object(ob_eval)),
                        "Make sure there is only one pointer for looptris");
         retval = snapEditMesh(

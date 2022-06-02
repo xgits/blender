@@ -10,6 +10,11 @@
 extern "C" {
 #endif
 
+struct MLoop;
+struct MLoopTri;
+struct MPoly;
+struct MVert;
+
 /* Axis-aligned bounding box */
 typedef struct {
   float bmin[3], bmax[3];
@@ -143,12 +148,12 @@ struct PBVH {
   /* Mesh data */
   const struct Mesh *mesh;
 
-  /* Note: Normals are not const because they can be updated for drawing by sculpt code. */
+  /* NOTE: Normals are not `const` because they can be updated for drawing by sculpt code. */
   float (*vert_normals)[3];
-  MVert *verts;
-  const MPoly *mpoly;
-  const MLoop *mloop;
-  const MLoopTri *looptri;
+  struct MVert *verts;
+  const struct MPoly *mpoly;
+  const struct MLoop *mloop;
+  const struct MLoopTri *looptri;
   CustomData *vdata;
   CustomData *ldata;
   CustomData *pdata;
@@ -167,7 +172,7 @@ struct PBVH {
 
   /* Used during BVH build and later to mark that a vertex needs to update
    * (its normal must be recalculated). */
-  BLI_bitmap *vert_bitmap;
+  bool *vert_bitmap;
 
 #ifdef PERFCNTRS
   int perf_modified;
@@ -195,7 +200,7 @@ struct PBVH {
   const struct MeshElemMap *pmap;
 
   CustomDataLayer *color_layer;
-  AttributeDomain color_domain;
+  eAttrDomain color_domain;
 
   bool is_drawing;
 

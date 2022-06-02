@@ -6,20 +6,26 @@
 
 #include <atomic>
 
+#include "BLI_devirtualize_parameters.hh"
 #include "BLI_utildefines.h"
+#include "BLI_vector_set.hh"
 
 #include "ED_curves.h"
 #include "ED_object.h"
 #include "ED_screen.h"
+#include "ED_select_utils.h"
 
 #include "WM_api.h"
 
 #include "BKE_bvhutils.h"
 #include "BKE_context.h"
 #include "BKE_curves.hh"
+#include "BKE_geometry_set.hh"
 #include "BKE_layer.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
+#include "BKE_object.h"
 #include "BKE_paint.h"
 #include "BKE_particle.h"
 #include "BKE_report.h"
@@ -32,9 +38,12 @@
 #include "DNA_scene_types.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
+#include "RNA_enum_types.h"
+#include "RNA_prototypes.h"
 
 /**
  * The code below uses a suffix naming convention to indicate the coordinate space:
@@ -45,6 +54,41 @@
  */
 
 namespace blender::ed::curves {
+
+static bool object_has_editable_curves(const Main &bmain, const Object &object)
+{
+  if (object.type != OB_CURVES) {
+    return false;
+  }
+  if (!ELEM(object.mode, OB_MODE_SCULPT_CURVES, OB_MODE_EDIT)) {
+    return false;
+  }
+  if (!BKE_id_is_editable(&bmain, static_cast<const ID *>(object.data))) {
+    return false;
+  }
+  return true;
+}
+
+static VectorSet<Curves *> get_unique_editable_curves(const bContext &C)
+{
+  VectorSet<Curves *> unique_curves;
+
+  const Main &bmain = *CTX_data_main(&C);
+
+  Object *object = CTX_data_active_object(&C);
+  if (object && object_has_editable_curves(bmain, *object)) {
+    unique_curves.add_new(static_cast<Curves *>(object->data));
+  }
+
+  CTX_DATA_BEGIN (&C, Object *, object, selected_objects) {
+    if (object_has_editable_curves(bmain, *object)) {
+      unique_curves.add(static_cast<Curves *>(object->data));
+    }
+  }
+  CTX_DATA_END;
+
+  return unique_curves;
+}
 
 using bke::CurvesGeometry;
 
@@ -190,9 +234,9 @@ static void try_convert_single_object(Object &curves_ob,
   /* The old hair system still uses #MFace, so make sure those are available on the mesh. */
   BKE_mesh_tessface_calc(&surface_me);
 
-  /* Prepare utility data structure to map hair roots to mfaces. */
+  /* Prepare utility data structure to map hair roots to #MFace's. */
   const Span<int> mface_to_poly_map{
-      static_cast<int *>(CustomData_get_layer(&surface_me.fdata, CD_ORIGINDEX)),
+      static_cast<const int *>(CustomData_get_layer(&surface_me.fdata, CD_ORIGINDEX)),
       surface_me.totface};
   Array<Vector<int>> poly_to_mface_map(surface_me.totpoly);
   for (const int mface_i : mface_to_poly_map.index_range()) {
@@ -311,6 +355,140 @@ static void CURVES_OT_convert_to_particle_system(wmOperatorType *ot)
 
   ot->poll = convert_to_particle_system::curves_convert_to_particle_system_poll;
   ot->exec = convert_to_particle_system::curves_convert_to_particle_system_exec;
+
+  ot->flag = OPTYPE_UNDO | OPTYPE_REGISTER;
+}
+
+namespace convert_from_particle_system {
+
+static bke::CurvesGeometry particles_to_curves(Object &object, ParticleSystem &psys)
+{
+  ParticleSettings &settings = *psys.part;
+  if (psys.part->type != PART_HAIR) {
+    return {};
+  }
+
+  const bool transfer_parents = (settings.draw & PART_DRAW_PARENT) || settings.childtype == 0;
+
+  const Span<ParticleCacheKey *> parents_cache{psys.pathcache, psys.totcached};
+  const Span<ParticleCacheKey *> children_cache{psys.childcache, psys.totchildcache};
+
+  int points_num = 0;
+  Vector<int> curve_offsets;
+  Vector<int> parents_to_transfer;
+  Vector<int> children_to_transfer;
+  if (transfer_parents) {
+    for (const int parent_i : parents_cache.index_range()) {
+      const int segments = parents_cache[parent_i]->segments;
+      if (segments <= 0) {
+        continue;
+      }
+      parents_to_transfer.append(parent_i);
+      curve_offsets.append(points_num);
+      points_num += segments + 1;
+    }
+  }
+  for (const int child_i : children_cache.index_range()) {
+    const int segments = children_cache[child_i]->segments;
+    if (segments <= 0) {
+      continue;
+    }
+    children_to_transfer.append(child_i);
+    curve_offsets.append(points_num);
+    points_num += segments + 1;
+  }
+  const int curves_num = parents_to_transfer.size() + children_to_transfer.size();
+  curve_offsets.append(points_num);
+  BLI_assert(curve_offsets.size() == curves_num + 1);
+  bke::CurvesGeometry curves(points_num, curves_num);
+  curves.offsets_for_write().copy_from(curve_offsets);
+
+  const float4x4 object_to_world_mat = object.obmat;
+  const float4x4 world_to_object_mat = object_to_world_mat.inverted();
+
+  MutableSpan<float3> positions = curves.positions_for_write();
+
+  const auto copy_hair_to_curves = [&](const Span<ParticleCacheKey *> hair_cache,
+                                       const Span<int> indices_to_transfer,
+                                       const int curve_index_offset) {
+    threading::parallel_for(indices_to_transfer.index_range(), 256, [&](const IndexRange range) {
+      for (const int i : range) {
+        const int hair_i = indices_to_transfer[i];
+        const int curve_i = i + curve_index_offset;
+        const IndexRange points = curves.points_for_curve(curve_i);
+        const Span<ParticleCacheKey> keys{hair_cache[hair_i], points.size()};
+        for (const int key_i : keys.index_range()) {
+          const float3 key_pos_wo = keys[key_i].co;
+          positions[points[key_i]] = world_to_object_mat * key_pos_wo;
+        }
+      }
+    });
+  };
+
+  if (transfer_parents) {
+    copy_hair_to_curves(parents_cache, parents_to_transfer, 0);
+  }
+  copy_hair_to_curves(children_cache, children_to_transfer, parents_to_transfer.size());
+
+  curves.update_curve_types();
+  curves.tag_topology_changed();
+  return curves;
+}
+
+static int curves_convert_from_particle_system_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  Main &bmain = *CTX_data_main(C);
+  ViewLayer &view_layer = *CTX_data_view_layer(C);
+  Depsgraph &depsgraph = *CTX_data_depsgraph_pointer(C);
+  Object *ob_from_orig = ED_object_active_context(C);
+  ParticleSystem *psys_orig = static_cast<ParticleSystem *>(
+      CTX_data_pointer_get_type(C, "particle_system", &RNA_ParticleSystem).data);
+  if (psys_orig == nullptr) {
+    psys_orig = psys_get_current(ob_from_orig);
+  }
+  if (psys_orig == nullptr) {
+    return OPERATOR_CANCELLED;
+  }
+  Object *ob_from_eval = DEG_get_evaluated_object(&depsgraph, ob_from_orig);
+  ParticleSystem *psys_eval = nullptr;
+  LISTBASE_FOREACH (ModifierData *, md, &ob_from_eval->modifiers) {
+    if (md->type != eModifierType_ParticleSystem) {
+      continue;
+    }
+    ParticleSystemModifierData *psmd = reinterpret_cast<ParticleSystemModifierData *>(md);
+    if (!STREQ(psmd->psys->name, psys_orig->name)) {
+      continue;
+    }
+    psys_eval = psmd->psys;
+  }
+
+  Object *ob_new = BKE_object_add(&bmain, &view_layer, OB_CURVES, psys_eval->name);
+  ob_new->dtx |= OB_DRAWBOUNDOX; /* TODO: Remove once there is actual drawing. */
+  Curves *curves_id = static_cast<Curves *>(ob_new->data);
+  BKE_object_apply_mat4(ob_new, ob_from_orig->obmat, true, false);
+  bke::CurvesGeometry::wrap(curves_id->geometry) = particles_to_curves(*ob_from_eval, *psys_eval);
+
+  DEG_relations_tag_update(&bmain);
+  WM_main_add_notifier(NC_OBJECT | ND_DRAW, nullptr);
+
+  return OPERATOR_FINISHED;
+}
+
+static bool curves_convert_from_particle_system_poll(bContext *C)
+{
+  return ED_object_active_context(C) != nullptr;
+}
+
+}  // namespace convert_from_particle_system
+
+static void CURVES_OT_convert_from_particle_system(wmOperatorType *ot)
+{
+  ot->name = "Convert Particle System to Curves";
+  ot->idname = "CURVES_OT_convert_from_particle_system";
+  ot->description = "Add a new curves object based on the current state of the particle system";
+
+  ot->poll = convert_from_particle_system::curves_convert_from_particle_system_poll;
+  ot->exec = convert_from_particle_system::curves_convert_from_particle_system_exec;
 
   ot->flag = OPTYPE_UNDO | OPTYPE_REGISTER;
 }
@@ -508,11 +686,231 @@ static void CURVES_OT_snap_curves_to_surface(wmOperatorType *ot)
                "How to find the point on the surface to attach to");
 }
 
+static bool selection_poll(bContext *C)
+{
+  const Object *object = CTX_data_active_object(C);
+  if (object == nullptr) {
+    return false;
+  }
+  if (object->type != OB_CURVES) {
+    return false;
+  }
+  if (!BKE_id_is_editable(CTX_data_main(C), static_cast<const ID *>(object->data))) {
+    return false;
+  }
+  return true;
+}
+
+namespace set_selection_domain {
+
+static int curves_set_selection_domain_exec(bContext *C, wmOperator *op)
+{
+  const eAttrDomain domain = eAttrDomain(RNA_enum_get(op->ptr, "domain"));
+
+  for (Curves *curves_id : get_unique_editable_curves(*C)) {
+    if (curves_id->selection_domain == domain && (curves_id->flag & CV_SCULPT_SELECTION_ENABLED)) {
+      continue;
+    }
+
+    const eAttrDomain old_domain = eAttrDomain(curves_id->selection_domain);
+    curves_id->selection_domain = domain;
+    curves_id->flag |= CV_SCULPT_SELECTION_ENABLED;
+
+    CurveComponent component;
+    component.replace(curves_id, GeometryOwnershipType::Editable);
+    CurvesGeometry &curves = CurvesGeometry::wrap(curves_id->geometry);
+
+    if (old_domain == ATTR_DOMAIN_POINT && domain == ATTR_DOMAIN_CURVE) {
+      VArray<float> curve_selection = curves.adapt_domain(
+          curves.selection_point_float(), ATTR_DOMAIN_POINT, ATTR_DOMAIN_CURVE);
+      curve_selection.materialize(curves.selection_curve_float_for_write());
+      component.attribute_try_delete(".selection_point_float");
+    }
+    else if (old_domain == ATTR_DOMAIN_CURVE && domain == ATTR_DOMAIN_POINT) {
+      VArray<float> point_selection = curves.adapt_domain(
+          curves.selection_curve_float(), ATTR_DOMAIN_CURVE, ATTR_DOMAIN_POINT);
+      point_selection.materialize(curves.selection_point_float_for_write());
+      component.attribute_try_delete(".selection_curve_float");
+    }
+
+    /* Use #ID_RECALC_GEOMETRY instead of #ID_RECALC_SELECT because it is handled as a generic
+     * attribute for now. */
+    DEG_id_tag_update(&curves_id->id, ID_RECALC_GEOMETRY);
+    WM_event_add_notifier(C, NC_GEOM | ND_DATA, curves_id);
+  }
+
+  WM_main_add_notifier(NC_SPACE | ND_SPACE_VIEW3D, nullptr);
+
+  return OPERATOR_FINISHED;
+}
+
+}  // namespace set_selection_domain
+
+static void CURVES_OT_set_selection_domain(wmOperatorType *ot)
+{
+  PropertyRNA *prop;
+
+  ot->name = "Set Select Mode";
+  ot->idname = __func__;
+  ot->description = "Change the mode used for selection masking in curves sculpt mode";
+
+  ot->exec = set_selection_domain::curves_set_selection_domain_exec;
+  ot->poll = selection_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  ot->prop = prop = RNA_def_enum(
+      ot->srna, "domain", rna_enum_attribute_curves_domain_items, 0, "Domain", "");
+  RNA_def_property_flag(prop, (PropertyFlag)(PROP_HIDDEN | PROP_SKIP_SAVE));
+}
+
+namespace disable_selection {
+
+static int curves_disable_selection_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  for (Curves *curves_id : get_unique_editable_curves(*C)) {
+    curves_id->flag &= ~CV_SCULPT_SELECTION_ENABLED;
+
+    /* Use #ID_RECALC_GEOMETRY instead of #ID_RECALC_SELECT because it is handled as a generic
+     * attribute for now. */
+    DEG_id_tag_update(&curves_id->id, ID_RECALC_GEOMETRY);
+    WM_event_add_notifier(C, NC_GEOM | ND_DATA, curves_id);
+  }
+
+  WM_main_add_notifier(NC_SPACE | ND_SPACE_VIEW3D, nullptr);
+
+  return OPERATOR_FINISHED;
+}
+
+}  // namespace disable_selection
+
+static void CURVES_OT_disable_selection(wmOperatorType *ot)
+{
+  ot->name = "Disable Selection";
+  ot->idname = __func__;
+  ot->description = "Disable the drawing of influence of selection in sculpt mode";
+
+  ot->exec = disable_selection::curves_disable_selection_exec;
+  ot->poll = selection_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+}
+
+namespace select_all {
+
+static bool varray_contains_nonzero(const VArray<float> &data)
+{
+  bool contains_nonzero = false;
+  devirtualize_varray(data, [&](const auto array) {
+    for (const int i : data.index_range()) {
+      if (array[i] != 0.0f) {
+        contains_nonzero = true;
+        break;
+      }
+    }
+  });
+  return contains_nonzero;
+}
+
+static bool any_point_selected(const CurvesGeometry &curves)
+{
+  return varray_contains_nonzero(curves.selection_point_float());
+}
+
+static bool any_point_selected(const Span<Curves *> curves_ids)
+{
+  for (const Curves *curves_id : curves_ids) {
+    if (any_point_selected(CurvesGeometry::wrap(curves_id->geometry))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void invert_selection(MutableSpan<float> selection)
+{
+  threading::parallel_for(selection.index_range(), 2048, [&](IndexRange range) {
+    for (const int i : range) {
+      selection[i] = 1.0f - selection[i];
+    }
+  });
+}
+
+static int select_all_exec(bContext *C, wmOperator *op)
+{
+  int action = RNA_enum_get(op->ptr, "action");
+
+  VectorSet<Curves *> unique_curves = get_unique_editable_curves(*C);
+
+  if (action == SEL_TOGGLE) {
+    action = any_point_selected(unique_curves) ? SEL_DESELECT : SEL_SELECT;
+  }
+
+  for (Curves *curves_id : unique_curves) {
+    if (action == SEL_SELECT) {
+      /* The optimization to avoid storing the selection when everything is selected causes too
+       * many problems at the moment, since there is no proper visualization yet. Keep the code but
+       * disable it for now. */
+#if 0
+      CurveComponent component;
+      component.replace(curves_id, GeometryOwnershipType::Editable);
+      component.attribute_try_delete(".selection_point_float");
+      component.attribute_try_delete(".selection_curve_float");
+#else
+      CurvesGeometry &curves = CurvesGeometry::wrap(curves_id->geometry);
+      MutableSpan<float> selection = curves_id->selection_domain == ATTR_DOMAIN_POINT ?
+                                         curves.selection_point_float_for_write() :
+                                         curves.selection_curve_float_for_write();
+      selection.fill(1.0f);
+#endif
+    }
+    else {
+      CurvesGeometry &curves = CurvesGeometry::wrap(curves_id->geometry);
+      MutableSpan<float> selection = curves_id->selection_domain == ATTR_DOMAIN_POINT ?
+                                         curves.selection_point_float_for_write() :
+                                         curves.selection_curve_float_for_write();
+      if (action == SEL_DESELECT) {
+        selection.fill(0.0f);
+      }
+      else if (action == SEL_INVERT) {
+        invert_selection(selection);
+      }
+    }
+
+    /* Use #ID_RECALC_GEOMETRY instead of #ID_RECALC_SELECT because it is handled as a generic
+     * attribute for now. */
+    DEG_id_tag_update(&curves_id->id, ID_RECALC_GEOMETRY);
+    WM_event_add_notifier(C, NC_GEOM | ND_DATA, curves_id);
+  }
+
+  return OPERATOR_FINISHED;
+}
+
+}  // namespace select_all
+
+static void SCULPT_CURVES_OT_select_all(wmOperatorType *ot)
+{
+  ot->name = "(De)select All";
+  ot->idname = __func__;
+  ot->description = "(De)select all control points";
+
+  ot->exec = select_all::select_all_exec;
+  ot->poll = selection_poll;
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  WM_operator_properties_select_all(ot);
+}
+
 }  // namespace blender::ed::curves
 
 void ED_operatortypes_curves()
 {
   using namespace blender::ed::curves;
   WM_operatortype_append(CURVES_OT_convert_to_particle_system);
+  WM_operatortype_append(CURVES_OT_convert_from_particle_system);
   WM_operatortype_append(CURVES_OT_snap_curves_to_surface);
+  WM_operatortype_append(CURVES_OT_set_selection_domain);
+  WM_operatortype_append(SCULPT_CURVES_OT_select_all);
+  WM_operatortype_append(CURVES_OT_disable_selection);
 }

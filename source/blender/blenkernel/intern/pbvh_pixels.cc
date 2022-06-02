@@ -462,7 +462,7 @@ struct EncodePixelsUserData {
   ImageUser *image_user;
   PBVH *pbvh;
   Vector<PBVHNode *> *nodes;
-  MLoopUV *ldata_uv;
+  const MLoopUV *ldata_uv;
 };
 
 static void do_encode_pixels(void *__restrict userdata,
@@ -645,7 +645,8 @@ static bool update_pixels(PBVH *pbvh, Mesh *mesh, Image *image, ImageUser *image
     return false;
   }
 
-  MLoopUV *ldata_uv = static_cast<MLoopUV *>(CustomData_get_layer(&mesh->ldata, CD_MLOOPUV));
+  const MLoopUV *ldata_uv = static_cast<const MLoopUV *>(
+      CustomData_get_layer(&mesh->ldata, CD_MLOOPUV));
   if (ldata_uv == nullptr) {
     return false;
   }
@@ -667,6 +668,12 @@ static bool update_pixels(PBVH *pbvh, Mesh *mesh, Image *image, ImageUser *image
   BLI_task_parallel_range(0, nodes_to_update.size(), &user_data, do_encode_pixels, &settings);
   if (USE_WATERTIGHT_CHECK) {
     apply_watertight_check(pbvh, image, image_user);
+  }
+
+  /* Rebuild the undo regions. */
+  for (PBVHNode *node : nodes_to_update) {
+    NodeData *node_data = static_cast<NodeData *>(node->pixels.node_data);
+    node_data->rebuild_undo_regions();
   }
 
   /* Clear the UpdatePixels flag. */

@@ -143,7 +143,7 @@ static void assign_materials(Main *bmain,
 
 static void *add_customdata_cb(Mesh *mesh, const char *name, const int data_type)
 {
-  CustomDataType cd_data_type = static_cast<CustomDataType>(data_type);
+  eCustomDataType cd_data_type = static_cast<eCustomDataType>(data_type);
   void *cd_ptr;
   CustomData *loopdata;
   int numloops;
@@ -200,7 +200,7 @@ void USDMeshReader::read_object_data(Main *bmain, const double motionSampleTime)
   if (read_mesh != mesh) {
     /* FIXME: after 2.80; `mesh->flag` isn't copied by #BKE_mesh_nomain_to_mesh() */
     /* read_mesh can be freed by BKE_mesh_nomain_to_mesh(), so get the flag before that happens. */
-    short autosmooth = (read_mesh->flag & ME_AUTOSMOOTH);
+    uint16_t autosmooth = (read_mesh->flag & ME_AUTOSMOOTH);
     BKE_mesh_nomain_to_mesh(read_mesh, mesh, object_, &CD_MASK_MESH, true);
     mesh->flag |= autosmooth;
   }

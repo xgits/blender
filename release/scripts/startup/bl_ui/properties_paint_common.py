@@ -797,7 +797,6 @@ def brush_settings(layout, context, brush, popover=False):
             col = layout.column()
             col.active = not brush.curves_sculpt_settings.interpolate_point_count
             col.prop(brush.curves_sculpt_settings, "points_per_curve")
-            use_frontface = True
         elif brush.curves_sculpt_tool == 'GROW_SHRINK':
             layout.prop(brush.curves_sculpt_settings, "scale_uniform")
             layout.prop(brush.curves_sculpt_settings, "minimum_length")
@@ -860,7 +859,7 @@ def brush_shared_settings(layout, context, brush, popover=False):
     if mode == 'SCULPT_CURVES':
         size = True
         strength = True
-        direction = brush.curves_sculpt_tool == 'GROW_SHRINK'
+        direction = brush.curves_sculpt_tool in {'GROW_SHRINK', 'SELECTION_PAINT'}
 
     ### Draw settings. ###
     ups = context.scene.tool_settings.unified_paint_settings

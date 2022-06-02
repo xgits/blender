@@ -140,7 +140,7 @@ struct NormalAnglePrecalc {
 static int get_vcol_elements(Mesh *me, size_t *r_elem_size)
 {
   CustomDataLayer *layer = BKE_id_attributes_active_color_get(&me->id);
-  AttributeDomain domain = BKE_id_attribute_domain(&me->id, layer);
+  eAttrDomain domain = BKE_id_attribute_domain(&me->id, layer);
 
   if (r_elem_size) {
     *r_elem_size = layer->type == CD_PROP_COLOR ? sizeof(float) * 4ULL : 4ULL;
@@ -324,15 +324,14 @@ bool weight_paint_poll_ignore_tool(bContext *C)
   return weight_paint_poll_ex(C, false);
 }
 
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 static Color vpaint_get_current_col(Scene *scene, VPaint *vp, bool secondary)
 {
   Brush *brush = BKE_paint_brush(&vp->paint);
   float color[4];
   const float *brush_color = secondary ? BKE_brush_secondary_color_get(scene, brush) :
                                          BKE_brush_color_get(scene, brush);
-  copy_v3_v3(color, brush_color);
-  IMB_colormanagement_srgb_to_scene_linear_v3(color);
+  IMB_colormanagement_srgb_to_scene_linear_v3(color, brush_color);
 
   color[3] = 1.0f; /* alpha isn't used, could even be removed to speedup paint a little */
 
@@ -2824,11 +2823,11 @@ void PAINT_OT_vertex_paint_toggle(wmOperatorType *ot)
 
 struct VPaintDataBase {
   ViewContext vc;
-  AttributeDomain domain;
-  CustomDataType type;
+  eAttrDomain domain;
+  eCustomDataType type;
 };
 
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 struct VPaintData : public VPaintDataBase {
   NormalAnglePrecalc normal_angle_precalc;
 
@@ -2856,7 +2855,7 @@ struct VPaintData : public VPaintDataBase {
   } smear;
 };
 
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 static void *vpaint_init_vpaint(bContext *C,
                                 wmOperator *op,
                                 Scene *scene,
@@ -2950,7 +2949,7 @@ static bool vpaint_stroke_test_start(bContext *C, wmOperator *op, const float mo
     return false;
   }
 
-  AttributeDomain domain = BKE_id_attribute_domain(&me->id, layer);
+  eAttrDomain domain = BKE_id_attribute_domain(&me->id, layer);
   void *vpd = nullptr;
 
   if (domain == ATTR_DOMAIN_POINT) {
@@ -3273,7 +3272,7 @@ static void do_vpaint_brush_blur_verts(bContext *C,
   });
 }
 
-template<typename Color = ColorPaint4b, typename Traits, AttributeDomain domain>
+template<typename Color = ColorPaint4b, typename Traits, eAttrDomain domain>
 static void do_vpaint_brush_smear(bContext *C,
                                   Sculpt *UNUSED(sd),
                                   VPaint *vp,
@@ -3452,7 +3451,7 @@ static void do_vpaint_brush_smear(bContext *C,
   });
 }
 
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 static void calculate_average_color(VPaintData<Color, Traits, domain> *vpd,
                                     Object *ob,
                                     Mesh *me,
@@ -3542,7 +3541,7 @@ static void calculate_average_color(VPaintData<Color, Traits, domain> *vpd,
   }
 }
 
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 static float paint_and_tex_color_alpha(VPaint *vp,
                                        VPaintData<Color, Traits, domain> *vpd,
                                        const float v_co[3],
@@ -3560,7 +3559,7 @@ static float paint_and_tex_color_alpha(VPaint *vp,
   return rgba[3];
 }
 
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 static void vpaint_do_draw(bContext *C,
                            Sculpt *UNUSED(sd),
                            VPaint *vp,
@@ -3700,7 +3699,7 @@ static void vpaint_do_draw(bContext *C,
   });
 }
 
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 static void vpaint_do_blur(bContext *C,
                            Sculpt *sd,
                            VPaint *vp,
@@ -3719,7 +3718,7 @@ static void vpaint_do_blur(bContext *C,
   }
 }
 
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 static void vpaint_paint_leaves(bContext *C,
                                 Sculpt *sd,
                                 VPaint *vp,
@@ -3755,7 +3754,7 @@ static void vpaint_paint_leaves(bContext *C,
   }
 }
 
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 static void vpaint_do_paint(bContext *C,
                             Sculpt *sd,
                             VPaint *vp,
@@ -3786,7 +3785,7 @@ static void vpaint_do_paint(bContext *C,
   }
 }
 
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 static void vpaint_do_radial_symmetry(bContext *C,
                                       Sculpt *sd,
                                       VPaint *vp,
@@ -3805,7 +3804,7 @@ static void vpaint_do_radial_symmetry(bContext *C,
 
 /* near duplicate of: sculpt.c's,
  * 'do_symmetrical_brush_actions' and 'wpaint_do_symmetrical_brush_actions'. */
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 static void vpaint_do_symmetrical_brush_actions(
     bContext *C, Sculpt *sd, VPaint *vp, VPaintData<Color, Traits, domain> *vpd, Object *ob)
 {
@@ -3852,7 +3851,7 @@ static void vpaint_do_symmetrical_brush_actions(
   cache->is_last_valid = true;
 }
 
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 static void vpaint_stroke_update_step_intern(bContext *C, PaintStroke *stroke, PointerRNA *itemptr)
 {
   Scene *scene = CTX_data_scene(C);
@@ -3940,7 +3939,7 @@ static void vpaint_stroke_update_step(bContext *C,
   }
 }
 
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 static void vpaint_free_vpaintdata(Object *UNUSED(ob), void *_vpd)
 {
   VPaintData<Color, Traits, domain> *vpd = static_cast<VPaintData<Color, Traits, domain> *>(_vpd);
@@ -4097,7 +4096,7 @@ void PAINT_OT_vertex_paint(wmOperatorType *ot)
 /** \name Set Vertex Colors Operator
  * \{ */
 
-template<typename Color, typename Traits, AttributeDomain domain>
+template<typename Color, typename Traits, eAttrDomain domain>
 static bool vertex_color_set(Object *ob, ColorPaint4f paintcol_in, Color *color_layer)
 {
   Mesh *me;
@@ -4165,7 +4164,7 @@ static bool paint_object_attributes_active_color_fill_ex(Object *ob,
     me->editflag &= ~ME_EDIT_PAINT_FACE_SEL;
     me->editflag &= ~ME_EDIT_PAINT_VERT_SEL;
   }
-  AttributeDomain domain = BKE_id_attribute_domain(&me->id, layer);
+  eAttrDomain domain = BKE_id_attribute_domain(&me->id, layer);
   bool ok = false;
   if (domain == ATTR_DOMAIN_POINT) {
     if (layer->type == CD_PROP_COLOR) {

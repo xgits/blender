@@ -137,7 +137,7 @@ ccl_device_forceinline void integrate_surface_direct_light(KernelGlobals kg,
 
 #  ifdef __MNEE__
   int mnee_vertex_count = 0;
-  IF_KERNEL_NODES_FEATURE(RAYTRACE)
+  IF_KERNEL_FEATURE(MNEE)
   {
     if (ls.lamp != LAMP_NONE) {
       /* Is this a caustic light? */
@@ -253,13 +253,13 @@ ccl_device_forceinline void integrate_surface_direct_light(KernelGlobals kg,
 #  ifdef __MNEE__
   if (mnee_vertex_count > 0) {
     INTEGRATOR_STATE_WRITE(shadow_state, shadow_path, transmission_bounce) =
-        INTEGRATOR_STATE(state, path, transmission_bounce) + mnee_vertex_count;
+        INTEGRATOR_STATE(state, path, transmission_bounce) + mnee_vertex_count - 1;
     INTEGRATOR_STATE_WRITE(shadow_state,
                            shadow_path,
                            diffuse_bounce) = INTEGRATOR_STATE(state, path, diffuse_bounce) + 1;
     INTEGRATOR_STATE_WRITE(shadow_state,
                            shadow_path,
-                           bounce) = INTEGRATOR_STATE(state, path, bounce) + 1 + mnee_vertex_count;
+                           bounce) = INTEGRATOR_STATE(state, path, bounce) + mnee_vertex_count;
   }
   else
 #  endif
@@ -629,6 +629,14 @@ ccl_device_forceinline void integrator_shade_surface_raytrace(
   integrator_shade_surface<KERNEL_FEATURE_NODE_MASK_SURFACE,
                            DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE>(
       kg, state, render_buffer);
+}
+
+ccl_device_forceinline void integrator_shade_surface_mnee(
+    KernelGlobals kg, IntegratorState state, ccl_global float *ccl_restrict render_buffer)
+{
+  integrator_shade_surface<(KERNEL_FEATURE_NODE_MASK_SURFACE & ~KERNEL_FEATURE_NODE_RAYTRACE) |
+                               KERNEL_FEATURE_MNEE,
+                           DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_MNEE>(kg, state, render_buffer);
 }
 
 CCL_NAMESPACE_END

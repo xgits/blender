@@ -359,9 +359,7 @@ void paint_brush_color_get(struct Scene *scene,
       }
       /* Gradient / Color-band colors are not considered #PROP_COLOR_GAMMA.
        * Brush colors are expected to be in sRGB though. */
-      IMB_colormanagement_scene_linear_to_srgb_v3(color_gr);
-
-      copy_v3_v3(color, color_gr);
+      IMB_colormanagement_scene_linear_to_srgb_v3(color, color_gr);
     }
     else {
       copy_v3_v3(color, BKE_brush_color_get(scene, br));
@@ -738,7 +736,7 @@ void PAINT_OT_sample_color(wmOperatorType *ot)
   ot->poll = sample_color_poll;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_REGISTER;
 
   /* properties */
   PropertyRNA *prop;
@@ -956,7 +954,7 @@ void PAINT_OT_brush_colors_flip(wmOperatorType *ot)
   ot->poll = brush_colors_flip_poll;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_REGISTER;
 }
 
 void ED_imapaint_bucket_fill(struct bContext *C,

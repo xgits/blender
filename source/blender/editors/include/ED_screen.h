@@ -596,7 +596,7 @@ bool ED_operator_posemode_context(struct bContext *C);
 bool ED_operator_posemode(struct bContext *C);
 bool ED_operator_posemode_local(struct bContext *C);
 bool ED_operator_mask(struct bContext *C);
-bool ED_operator_camera(struct bContext *C);
+bool ED_operator_camera_poll(struct bContext *C);
 
 /* screen_user_menu.c */
 
@@ -666,7 +666,7 @@ bool ED_region_panel_category_gutter_calc_rect(const ARegion *region, rcti *r_re
 bool ED_region_panel_category_gutter_isect_xy(const ARegion *region, const int event_xy[2]);
 
 /**
- * \note: This may return true for multiple overlapping regions.
+ * \note This may return true for multiple overlapping regions.
  * If it matters, check overlapped regions first (#ARegion.overlap).
  */
 bool ED_region_contains_xy(const struct ARegion *region, const int event_xy[2]);

@@ -244,8 +244,8 @@ static int map_insert_vert(
   key = POINTER_FROM_INT(vertex);
   if (!BLI_ghash_ensure_p(map, key, &value_p)) {
     int value_i;
-    if (BLI_BITMAP_TEST(pbvh->vert_bitmap, vertex) == 0) {
-      BLI_BITMAP_ENABLE(pbvh->vert_bitmap, vertex);
+    if (!pbvh->vert_bitmap[vertex]) {
+      pbvh->vert_bitmap[vertex] = true;
       value_i = *uniq_verts;
       (*uniq_verts)++;
     }
@@ -562,7 +562,7 @@ void BKE_pbvh_build_mesh(PBVH *pbvh,
   pbvh->verts = verts;
   BKE_mesh_vertex_normals_ensure(mesh);
   pbvh->vert_normals = BKE_mesh_vertex_normals_for_write(mesh);
-  pbvh->vert_bitmap = BLI_BITMAP_NEW(totvert, "bvh->vert_bitmap");
+  pbvh->vert_bitmap = MEM_calloc_arrayN(totvert, sizeof(bool), "bvh->vert_bitmap");
   pbvh->totvert = totvert;
   pbvh->leaf_limit = LEAF_LIMIT;
   pbvh->vdata = vdata;
@@ -600,7 +600,7 @@ void BKE_pbvh_build_mesh(PBVH *pbvh,
   MEM_freeN(prim_bbc);
 
   /* Clear the bitmap so it can be used as an update tag later on. */
-  BLI_bitmap_set_all(pbvh->vert_bitmap, false, totvert);
+  memset(pbvh->vert_bitmap, 0, sizeof(bool) * totvert);
 
   BKE_pbvh_update_active_vcol(pbvh, mesh);
 }
@@ -1033,7 +1033,7 @@ static void pbvh_update_normals_clear_task_cb(void *__restrict userdata,
     const int totvert = node->uniq_verts;
     for (int i = 0; i < totvert; i++) {
       const int v = verts[i];
-      if (BLI_BITMAP_TEST(pbvh->vert_bitmap, v)) {
+      if (pbvh->vert_bitmap[v]) {
         zero_v3(vnors[v]);
       }
     }
@@ -1076,7 +1076,7 @@ static void pbvh_update_normals_accum_task_cb(void *__restrict userdata,
       for (int j = sides; j--;) {
         const int v = vtri[j];
 
-        if (BLI_BITMAP_TEST(pbvh->vert_bitmap, v)) {
+        if (pbvh->vert_bitmap[v]) {
           /* NOTE: This avoids `lock, add_v3_v3, unlock`
            * and is five to ten times quicker than a spin-lock.
            * Not exact equivalent though, since atomicity is only ensured for one component
@@ -1108,9 +1108,9 @@ static void pbvh_update_normals_store_task_cb(void *__restrict userdata,
 
       /* No atomics necessary because we are iterating over uniq_verts only,
        * so we know only this thread will handle this vertex. */
-      if (BLI_BITMAP_TEST(pbvh->vert_bitmap, v)) {
+      if (pbvh->vert_bitmap[v]) {
         normalize_v3(vnors[v]);
-        BLI_BITMAP_DISABLE(pbvh->vert_bitmap, v);
+        pbvh->vert_bitmap[v] = false;
       }
     }
 
@@ -1276,7 +1276,7 @@ static int pbvh_get_buffers_update_flags(PBVH *UNUSED(pbvh))
   return update_flags;
 }
 
-bool BKE_pbvh_get_color_layer(const Mesh *me, CustomDataLayer **r_layer, AttributeDomain *r_attr)
+bool BKE_pbvh_get_color_layer(const Mesh *me, CustomDataLayer **r_layer, eAttrDomain *r_attr)
 {
   CustomDataLayer *layer = BKE_id_attributes_active_color_get((ID *)me);
 
@@ -1286,7 +1286,7 @@ bool BKE_pbvh_get_color_layer(const Mesh *me, CustomDataLayer **r_layer, Attribu
     return false;
   }
 
-  AttributeDomain domain = BKE_id_attribute_domain((ID *)me, layer);
+  eAttrDomain domain = BKE_id_attribute_domain((ID *)me, layer);
 
   if (!ELEM(domain, ATTR_DOMAIN_POINT, ATTR_DOMAIN_CORNER)) {
     *r_layer = NULL;
@@ -1352,7 +1352,7 @@ static void pbvh_update_draw_buffer_cb(void *__restrict userdata,
         break;
       case PBVH_FACES: {
         CustomDataLayer *layer = NULL;
-        AttributeDomain domain;
+        eAttrDomain domain;
 
         BKE_pbvh_get_color_layer(pbvh->mesh, &layer, &domain);
 
@@ -1891,7 +1891,7 @@ bool BKE_pbvh_node_fully_unmasked_get(PBVHNode *node)
 void BKE_pbvh_vert_mark_update(PBVH *pbvh, int index)
 {
   BLI_assert(pbvh->type == PBVH_FACES);
-  BLI_BITMAP_ENABLE(pbvh->vert_bitmap, index);
+  pbvh->vert_bitmap[index] = true;
 }
 
 void BKE_pbvh_node_get_loops(PBVH *pbvh,
@@ -2056,7 +2056,7 @@ bool BKE_pbvh_node_vert_update_check_any(PBVH *pbvh, PBVHNode *node)
   for (int i = 0; i < totvert; i++) {
     const int v = verts[i];
 
-    if (BLI_BITMAP_TEST(pbvh->vert_bitmap, v)) {
+    if (pbvh->vert_bitmap[v]) {
       return true;
     }
   }

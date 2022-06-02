@@ -246,7 +246,7 @@ class _draw_tool_settings_context_mode:
             unified_name="use_unified_size",
             text="Radius",
             slider=True,
-            header=True
+            header=True,
         )
 
         # strength, use_strength_pressure
@@ -259,7 +259,7 @@ class _draw_tool_settings_context_mode:
             pressure_name=pressure_name,
             unified_name="use_unified_strength",
             text="Strength",
-            header=True
+            header=True,
         )
 
         # direction
@@ -320,7 +320,7 @@ class _draw_tool_settings_context_mode:
                 "weight",
                 unified_name="use_unified_weight",
                 slider=True,
-                header=True
+                header=True,
             )
 
         UnifiedPaintPanel.prop_unified(
@@ -332,7 +332,7 @@ class _draw_tool_settings_context_mode:
             unified_name="use_unified_size",
             slider=True,
             text="Radius",
-            header=True
+            header=True,
         )
         UnifiedPaintPanel.prop_unified(
             layout,
@@ -341,7 +341,7 @@ class _draw_tool_settings_context_mode:
             "strength",
             pressure_name="use_pressure_strength",
             unified_name="use_unified_strength",
-            header=True
+            header=True,
         )
 
         return True
@@ -490,16 +490,16 @@ class _draw_tool_settings_context_mode:
             return False
 
         UnifiedPaintPanel.prop_unified(
-                layout,
-                context,
-                brush,
-                "size",
-                unified_name="use_unified_size",
-                pressure_name="use_pressure_size",
-                text="Radius",
-                slider=True,
-                header=True
-            )
+            layout,
+            context,
+            brush,
+            "size",
+            unified_name="use_unified_size",
+            pressure_name="use_pressure_size",
+            text="Radius",
+            slider=True,
+            header=True,
+        )
 
         if brush.curves_sculpt_tool not in {'ADD', 'DELETE'}:
             UnifiedPaintPanel.prop_unified(
@@ -509,7 +509,7 @@ class _draw_tool_settings_context_mode:
                 "strength",
                 unified_name="use_unified_strength",
                 pressure_name="use_pressure_strength",
-                header=True
+                header=True,
             )
 
         if brush.curves_sculpt_tool == 'COMB':
@@ -521,7 +521,6 @@ class _draw_tool_settings_context_mode:
             layout.prop(brush.curves_sculpt_settings, "add_amount")
             layout.popover("VIEW3D_PT_curves_sculpt_add_shape", text="Curve Shape")
             layout.prop(brush, "use_frontface", text="Front Faces Only")
-
 
         if brush.curves_sculpt_tool == 'GROW_SHRINK':
             layout.prop(brush, "direction", expand=True, text="")
@@ -535,6 +534,11 @@ class _draw_tool_settings_context_mode:
 
         if brush.curves_sculpt_tool == 'DELETE':
             layout.prop(brush, "falloff_shape", expand=True)
+
+        if brush.curves_sculpt_tool == 'SELECTION_PAINT':
+            layout.prop(brush, "direction", expand=True, text="")
+            layout.prop(brush, "falloff_shape", expand=True)
+            layout.popover("VIEW3D_PT_tools_brush_falloff")
 
 
 class VIEW3D_HT_header(Header):
@@ -688,6 +692,24 @@ class VIEW3D_HT_header(Header):
             if object_mode == 'PARTICLE_EDIT':
                 row = layout.row()
                 row.prop(tool_settings.particle_edit, "select_mode", text="", expand=True)
+            elif object_mode == 'SCULPT_CURVES' and obj.type == 'CURVES':
+                curves = obj.data
+
+                row = layout.row(align=True)
+
+                experimental = context.preferences.experimental
+                if experimental.use_new_curves_tools:
+                    # Combine the "use selection" toggle with the "set domain" operators
+                    # to allow turning selection off directly.
+                    domain = curves.selection_domain
+                    if domain == 'POINT':
+                        row.prop(curves, "use_sculpt_selection", text="", icon='CURVE_BEZCIRCLE')
+                    else:
+                        row.operator("curves.set_selection_domain", text="", icon='CURVE_BEZCIRCLE').domain = 'POINT'
+                    if domain == 'CURVE':
+                        row.prop(curves, "use_sculpt_selection", text="", icon='CURVE_PATH')
+                    else:
+                        row.operator("curves.set_selection_domain", text="", icon='CURVE_PATH').domain = 'CURVE'
 
         # Grease Pencil
         if obj and obj.type == 'GPENCIL' and context.gpencil_data:
@@ -940,6 +962,7 @@ class VIEW3D_MT_editor_menus(Menu):
                 layout.menu("VIEW3D_MT_mask")
                 layout.menu("VIEW3D_MT_face_sets")
             if mode_string == 'SCULPT_CURVES':
+                layout.menu("VIEW3D_MT_select_sculpt_curves")
                 layout.menu("VIEW3D_MT_sculpt_curves")
 
         else:
@@ -1977,6 +2000,17 @@ class VIEW3D_MT_select_edit_curves(Menu):
         pass
 
 
+class VIEW3D_MT_select_sculpt_curves(Menu):
+    bl_label = "Select"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator("sculpt_curves.select_all", text="All").action = 'SELECT'
+        layout.operator("sculpt_curves.select_all", text="None").action = 'DESELECT'
+        layout.operator("sculpt_curves.select_all", text="Invert").action = 'INVERT'
+
+
 class VIEW3D_MT_angle_control(Menu):
     bl_label = "Angle Control"
 
@@ -2296,6 +2330,8 @@ class VIEW3D_MT_object_relations(Menu):
         layout = self.layout
 
         layout.operator("object.make_override_library", text="Make Library Override...")
+        layout.operator("object.make_override_library",
+                        text="Make Library Override - Fully Editable...").do_fully_editable = True
 
         layout.operator("object.make_dupli_face")
 
@@ -5690,7 +5726,7 @@ class VIEW3D_PT_object_type_visibility(Panel):
     # Allows derived classes to pass view data other than context.space_data.
     # This is used by the official VR add-on, which passes XrSessionSettings
     # since VR has a 3D view that only exists for the duration of the VR session.
-    def draw_ex(self, context, view, show_select):
+    def draw_ex(self, _context, view, show_select):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -7702,6 +7738,7 @@ classes = (
     VIEW3D_MT_select_paint_mask,
     VIEW3D_MT_select_paint_mask_vertex,
     VIEW3D_MT_select_edit_curves,
+    VIEW3D_MT_select_sculpt_curves,
     VIEW3D_MT_angle_control,
     VIEW3D_MT_mesh_add,
     VIEW3D_MT_curve_add,

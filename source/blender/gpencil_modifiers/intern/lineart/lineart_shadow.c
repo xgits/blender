@@ -71,35 +71,65 @@ void lineart_register_shadow_cuts(LineartRenderBuffer *rb,
   }
 }
 
+typedef struct LineartIntersectionCutData {
+  LineartElementLinkNode *eln_isect_shadow;
+  LineartElementLinkNode *eln_isect_original;
+  LineartRenderBuffer *rb;
+} LineartIntersectionCutData;
+
+void lineart_intersection_shadow_cut_task(void *__restrict userdata,
+                                          const int orig_edge_index,
+                                          const TaskParallelTLS *__restrict UNUSED(tls))
+{
+  LineartIntersectionCutData *data = (LineartIntersectionCutData *)userdata;
+
+  LineartElementLinkNode *eln_isect_shadow = data->eln_isect_shadow;
+  LineartElementLinkNode *eln_isect_original = data->eln_isect_original;
+  LineartRenderBuffer *rb = data->rb;
+
+  LineartEdge *e = &((LineartEdge *)eln_isect_original->pointer)[orig_edge_index];
+  LineartEdge *shadow_e = lineart_find_matching_edge(eln_isect_shadow, (uint64_t)e->from_shadow);
+  if (shadow_e) {
+    lineart_register_shadow_cuts(rb, e, shadow_e);
+  }
+}
+
 void lineart_register_intersection_shadow_cuts(LineartRenderBuffer *rb, ListBase *shadow_elns)
 {
-  LineartElementLinkNode *eln_isect_shadow = NULL, *eln_isect_original = NULL;
   if (!shadow_elns) {
     return;
   }
+
+  LineartIntersectionCutData data = {0};
+
+  data.rb = rb;
+
   LISTBASE_FOREACH (LineartElementLinkNode *, eln, shadow_elns) {
     if (eln->flags & LRT_ELEMENT_INTERSECTION_DATA) {
-      eln_isect_shadow = eln;
+      data.eln_isect_shadow = eln;
       break;
     }
   }
   LISTBASE_FOREACH (LineartElementLinkNode *, eln, &rb->line_buffer_pointers) {
     if (eln->flags & LRT_ELEMENT_INTERSECTION_DATA) {
-      eln_isect_original = eln;
+      data.eln_isect_original = eln;
       break;
     }
   }
-  if (!eln_isect_shadow || !eln_isect_original) {
+  if (!data.eln_isect_shadow || !data.eln_isect_original) {
     return;
   }
-  LineartEdge *e = (LineartEdge *)eln_isect_original->pointer;
-  for (int i = 0; i < eln_isect_original->element_count; i++) {
-    LineartEdge *shadow_e = lineart_find_matching_edge(eln_isect_shadow, (uint64_t)e->from_shadow);
-    if (shadow_e) {
-      lineart_register_shadow_cuts(rb, e, shadow_e);
-    }
-    e++;
-  }
+
+  TaskParallelSettings cut_settings;
+  BLI_parallel_range_settings_defaults(&cut_settings);
+  /* Set the minimum amount of edges a thread has to process. */
+  cut_settings.min_iter_per_thread = 2000;
+
+  BLI_task_parallel_range(0,
+                          data.eln_isect_original->element_count,
+                          &data,
+                          lineart_intersection_shadow_cut_task,
+                          &cut_settings);
 }
 
 /* Shadow computation part ================== */

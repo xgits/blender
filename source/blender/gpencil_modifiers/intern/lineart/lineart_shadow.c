@@ -973,6 +973,11 @@ bool lineart_main_try_generate_shadow(Depsgraph *depsgraph,
     return false;
   }
 
+  double t_start;
+  if (G.debug_value == 4000) {
+    t_start = PIL_check_seconds_timer();
+  }
+
   bool is_persp = true;
 
   if (lmd->light_contour_object->type == OB_LAMP) {
@@ -1096,6 +1101,13 @@ bool lineart_main_try_generate_shadow(Depsgraph *depsgraph,
     MEM_freeN(rb);
   }
 
+  if (G.debug_value == 4000) {
+    lineart_count_and_print_render_buffer_memory(rb);
+
+    double t_elapsed = PIL_check_seconds_timer() - t_start;
+    printf("Line art shadow stage 1 time: %f\n", t_elapsed);
+  }
+
   return any_generated;
 }
 
@@ -1117,11 +1129,23 @@ void lineart_main_transform_and_add_shadow(LineartRenderBuffer *rb,
 
 void lineart_main_make_enclosed_shapes(LineartRenderBuffer *rb, LineartRenderBuffer *shadow_rb)
 {
+  double t_start;
+  if (G.debug_value == 4000) {
+    t_start = PIL_check_seconds_timer();
+  }
+
   if (shadow_rb || rb->shadow_use_silhouette) {
     lineart_shadow_cast(rb, false, shadow_rb ? true : false);
     if (rb->shadow_use_silhouette) {
       lineart_shadow_register_silhouette(rb);
     }
+  }
+
+  if (G.debug_value == 4000) {
+    lineart_count_and_print_render_buffer_memory(rb);
+
+    double t_elapsed = PIL_check_seconds_timer() - t_start;
+    printf("Line art shadow stage 2 cast and silhouette time: %f\n", t_elapsed);
   }
 
   if (!shadow_rb) {
@@ -1167,4 +1191,11 @@ void lineart_main_make_enclosed_shapes(LineartRenderBuffer *rb, LineartRenderBuf
   lineart_main_occlusion_begin(shadow_rb);
 
   lineart_shadow_register_enclosed_shapes(rb, shadow_rb);
+
+  if (G.debug_value == 4000) {
+    lineart_count_and_print_render_buffer_memory(rb);
+
+    double t_elapsed = PIL_check_seconds_timer() - t_start;
+    printf("Line art shadow stage 2 total time: %f\n", t_elapsed);
+  }
 }

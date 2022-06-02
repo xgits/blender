@@ -346,7 +346,8 @@ typedef struct LineartRenderBuffer {
   ListBase chains;
 
   /* Intermediate shadow results, list of LineartShadowSegmentContainer */
-  ListBase shadow_containers;
+  LineartShadowSegmentContainer *shadow_containers;
+  int shadow_containers_count;
 
   /* For managing calculation tasks for multiple threads. */
   SpinLock lock_task;

@@ -63,15 +63,13 @@
 #include "RNA_prototypes.h"
 
 #include "BLO_readfile.h"
-#include "MEM_guardedalloc.h"
+
 #include "readfile.h"
 
 #include "SEQ_channels.h"
 #include "SEQ_iterator.h"
 #include "SEQ_sequencer.h"
 #include "SEQ_time.h"
-
-#include "RNA_access.h"
 
 #include "versioning_common.h"
 
@@ -2502,8 +2500,8 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
   /* Rebuild active/render color attribute references. */
   if (!MAIN_VERSION_ATLEAST(bmain, 302, 6)) {
     LISTBASE_FOREACH (Brush *, br, &bmain->brushes) {
-      /* buggy code in wm_toolsystem broke smear in old files,
-         reset to defaults */
+      /* Buggy code in wm_toolsystem broke smear in old files,
+       * reset to defaults. */
       if (br->sculpt_tool == SCULPT_TOOL_SMEAR) {
         br->alpha = 1.0f;
         br->spacing = 5;

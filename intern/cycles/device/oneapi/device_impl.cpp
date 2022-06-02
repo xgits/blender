@@ -91,11 +91,6 @@ BVHLayoutMask OneapiDevice::get_bvh_layout_mask() const
   return BVH_LAYOUT_BVH2;
 }
 
-string OneapiDevice::load_kernels_message(const uint /*requested_features*/)
-{
-  return "Loading render kernels (may take a few dozens of minutes)";
-}
-
 bool OneapiDevice::load_kernels(const uint requested_features)
 {
   assert(device_queue);

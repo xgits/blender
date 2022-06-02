@@ -157,12 +157,6 @@ class Device {
     return true;
   }
 
-  /* Message, which will be shown during loading/compiling of kernels */
-  virtual string load_kernels_message(uint /*kernel_features*/)
-  {
-    return "Loading render kernels (may take a few minutes the first time)";
-  }
-
   /* GPU device only functions.
    * These may not be used on CPU or multi-devices. */
 

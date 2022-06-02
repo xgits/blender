@@ -725,6 +725,7 @@ if(WITH_CYCLES_DEVICE_ONEAPI)
       -fdelayed-template-parsing
       -shared
       -DWITH_ONEAPI
+      -ffast-math
       -DNDEBUG
       -O2
       -o ${cycles_kernel_oneapi_lib}
@@ -800,11 +801,6 @@ if(WITH_CYCLES_DEVICE_ONEAPI)
     endif()
   endif()
 
-  # avoid using -ffast-math for the graphics compiler on CentOS 7 until the compile-time issue it triggers gets fixed.
-  if(WIN32 OR NOT WITH_CYCLES_ONEAPI_BINARIES)
-    list(APPEND sycl_compiler_flags -ffast-math)
-  endif()
-
   if(WIN32)
     list(APPEND sycl_compiler_flags
     -fms-extensions
@@ -849,6 +845,11 @@ if(WITH_CYCLES_DEVICE_ONEAPI)
     endif()
   else()
     list(APPEND sycl_compiler_flags -fPIC)
+
+    # avoid getting __FAST_MATH__ to be defined for the graphics compiler on CentOS 7 until the compile-time issue it triggers gets fixed.
+    if(WITH_CYCLES_ONEAPI_BINARIES)
+      list(APPEND sycl_compiler_flags -fhonor-nans)
+    endif()
 
     # add $ORIGIN to cycles_kernel_oneapi.so rpath so libsycl.so and
     # libpi_level_zero.so can be placed next to it and get found.

@@ -567,7 +567,6 @@ typedef struct LineartBoundingArea {
   ListBase up;
   ListBase bp;
 
-  /* Need uint32 for the atomic cas instruction. */
   uint32_t triangle_count;
   uint32_t max_triangle_count;
   uint32_t line_count;

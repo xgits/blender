@@ -7,7 +7,8 @@
 
 #  include <stddef.h>
 
-// NOTE(sirgienko) Should match underlying type in the declaration inside "kernel/types.h"
+// NOTE(@nsirgien): Should match underlying type in the declaration inside "kernel/types.h"
+// TODO: use kernel/types.h directly
 enum DeviceKernel : int;
 
 #  ifndef CYCLES_KERNEL_ONEAPI_EXPORT

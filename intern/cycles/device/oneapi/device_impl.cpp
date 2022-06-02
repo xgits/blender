@@ -15,7 +15,7 @@ CCL_NAMESPACE_BEGIN
 static void queue_error_cb(const char *message, void *user_ptr)
 {
   if (user_ptr) {
-    *((std::string *)user_ptr) = message;
+    *reinterpret_cast<std::string *>(user_ptr) = message;
   }
 }
 
@@ -33,12 +33,12 @@ OneapiDevice::OneapiDevice(const DeviceInfo &info,
 {
   need_texture_info = false;
 
-  (oneapi_dll.oneapi_set_error_cb)(queue_error_cb, &oneapi_error_string);
+  oneapi_dll.oneapi_set_error_cb(queue_error_cb, &oneapi_error_string);
 
   // Oneapi calls should be initialised on this moment;
   assert(oneapi_dll.oneapi_create_queue != nullptr);
 
-  bool is_finished_ok = (oneapi_dll.oneapi_create_queue)(device_queue, info.num);
+  bool is_finished_ok = oneapi_dll.oneapi_create_queue(device_queue, info.num);
   if (is_finished_ok == false) {
     set_error("oneAPI queue initialization error: got runtime exception \"" + oneapi_error_string +
               "\"");
@@ -50,7 +50,7 @@ OneapiDevice::OneapiDevice(const DeviceInfo &info,
   }
 
   size_t globals_segment_size;
-  is_finished_ok = (oneapi_dll.oneapi_kernel_globals_size)(device_queue, globals_segment_size);
+  is_finished_ok = oneapi_dll.oneapi_kernel_globals_size(device_queue, globals_segment_size);
   if (is_finished_ok == false) {
     set_error("oneAPI constant memory initialization got runtime exception \"" +
               oneapi_error_string + "\"");
@@ -59,10 +59,10 @@ OneapiDevice::OneapiDevice(const DeviceInfo &info,
     VLOG(1) << "Successfully created global/constant memory segment (kernel globals object)";
   }
 
-  kg_memory = (oneapi_dll.oneapi_usm_aligned_alloc_host)(device_queue, globals_segment_size, 16);
-  (oneapi_dll.oneapi_usm_memset)(device_queue, kg_memory, 0, globals_segment_size);
+  kg_memory = oneapi_dll.oneapi_usm_aligned_alloc_host(device_queue, globals_segment_size, 16);
+  oneapi_dll.oneapi_usm_memset(device_queue, kg_memory, 0, globals_segment_size);
 
-  kg_memory_device = (oneapi_dll.oneapi_usm_alloc_device)(device_queue, globals_segment_size);
+  kg_memory_device = oneapi_dll.oneapi_usm_alloc_device(device_queue, globals_segment_size);
 
   kg_memory_size = globals_segment_size;
 }
@@ -70,15 +70,14 @@ OneapiDevice::OneapiDevice(const DeviceInfo &info,
 OneapiDevice::~OneapiDevice()
 {
   texture_info.free();
-  (oneapi_dll.oneapi_usm_free)(device_queue, kg_memory);
-  (oneapi_dll.oneapi_usm_free)(device_queue, kg_memory_device);
+  oneapi_dll.oneapi_usm_free(device_queue, kg_memory);
+  oneapi_dll.oneapi_usm_free(device_queue, kg_memory_device);
 
-  ConstMemMap::iterator mt;
-  for (mt = m_const_mem_map.begin(); mt != m_const_mem_map.end(); mt++)
+  for (ConstMemMap::iterator mt = m_const_mem_map.begin(); mt != m_const_mem_map.end(); mt++)
     delete mt->second;
 
   if (device_queue)
-    (oneapi_dll.oneapi_free_queue)(device_queue);
+    oneapi_dll.oneapi_free_queue(device_queue);
 }
 
 bool OneapiDevice::check_peer_access(Device * /*peer_device*/)
@@ -94,11 +93,11 @@ BVHLayoutMask OneapiDevice::get_bvh_layout_mask() const
 bool OneapiDevice::load_kernels(const uint requested_features)
 {
   assert(device_queue);
-  // NOTE(sirgienko) oneAPI can support compilation of kernel code with sertain feature set
+  // NOTE(@nsirgien): oneAPI can support compilation of kernel code with sertain feature set
   // with specialization constants, but it hasn't been implemented yet.
   (void)requested_features;
 
-  bool is_finished_ok = (oneapi_dll.oneapi_trigger_runtime_compilation)(device_queue);
+  bool is_finished_ok = oneapi_dll.oneapi_run_test_kernel(device_queue);
   if (is_finished_ok == false) {
     set_error("oneAPI kernel load: got runtime exception \"" + oneapi_error_string + "\"");
   }
@@ -121,13 +120,13 @@ void OneapiDevice::generic_alloc(device_memory &mem)
 {
   size_t memory_size = mem.memory_size();
 
-  // TODO(sirgienko) In future, if scene doesn't fit into device memory, then
+  // TODO(@nsirgien): In future, if scene doesn't fit into device memory, then
   // we can use USM host memory.
   // Because of the expected performance impact, implementation of this has had a low priority
   // and is not implemented yet.
 
   assert(device_queue);
-  // NOTE(sirgienko) There are three types of Unified Shared Memory (USM) in oneAPI: host, device
+  // NOTE(@nsirgien): There are three types of Unified Shared Memory (USM) in oneAPI: host, device
   // and shared. For new project it maybe more beneficial to use USM shared memory, because it
   // provides automatic migration mechanism in order to allow to use the same pointer on host and
   // on device, without need to worry about explicit memory transfer operations. But for
@@ -135,9 +134,9 @@ void OneapiDevice::generic_alloc(device_memory &mem)
   // because Cycles already uses two different pointer for host activity and device activity, and
   // also has to perform all needed memory transfer operations. So, USM device memory
   // type has been used for oneAPI device in order to better fit in Cycles architecture.
-  void *device_pointer = (oneapi_dll.oneapi_usm_alloc_device)(device_queue, memory_size);
+  void *device_pointer = oneapi_dll.oneapi_usm_alloc_device(device_queue, memory_size);
   if (device_pointer == nullptr) {
-    size_t max_memory_on_device = (oneapi_dll.oneapi_get_memcapacity)(device_queue);
+    size_t max_memory_on_device = oneapi_dll.oneapi_get_memcapacity(device_queue);
     set_error("oneAPI kernel - device memory allocation error for " +
               string_human_readable_size(mem.memory_size()) +
               ", possibly caused by lack of available memory space on the device: " +
@@ -147,7 +146,7 @@ void OneapiDevice::generic_alloc(device_memory &mem)
   }
   assert(device_pointer);
 
-  mem.device_pointer = (ccl::device_ptr)device_pointer;
+  mem.device_pointer = reinterpret_cast<ccl::device_ptr>(device_pointer);
   mem.device_size = memory_size;
 
   stats.mem_alloc(memory_size);
@@ -160,10 +159,11 @@ void OneapiDevice::generic_copy_to(device_memory &mem)
   // copy operation from host shouldn't be requested if there is no memory allocated on host.
   assert(mem.host_pointer);
   assert(device_queue);
-  (oneapi_dll.oneapi_usm_memcpy)(
+  oneapi_dll.oneapi_usm_memcpy(
       device_queue, (void *)mem.device_pointer, (void *)mem.host_pointer, memory_size);
 }
 
+// TODO: Make sycl::queue part of OneapiQueue and avoid using pointers to sycl::queue.
 SyclQueue *OneapiDevice::sycl_queue()
 {
   return device_queue;
@@ -171,7 +171,7 @@ SyclQueue *OneapiDevice::sycl_queue()
 
 string OneapiDevice::oneapi_error_message()
 {
-  return string(oneapi_error_string.c_str());
+  return string(oneapi_error_string);
 }
 
 OneAPIDLLInterface OneapiDevice::oneapi_dll_object()
@@ -191,7 +191,7 @@ void OneapiDevice::generic_free(device_memory &mem)
   mem.device_size = 0;
 
   assert(device_queue);
-  (oneapi_dll.oneapi_usm_free)(device_queue, (void *)mem.device_pointer);
+  oneapi_dll.oneapi_usm_free(device_queue, (void *)mem.device_pointer);
   mem.device_pointer = 0;
 }
 
@@ -257,10 +257,10 @@ void OneapiDevice::mem_copy_from(device_memory &mem, size_t y, size_t w, size_t 
 
     assert(size != 0);
     assert(mem.device_pointer);
-    char *shifted_host = (char *)mem.host_pointer + offset;
-    char *shifted_device = (char *)mem.device_pointer + offset;
-    bool is_finished_ok =
-        (oneapi_dll.oneapi_usm_memcpy)(device_queue, shifted_host, shifted_device, size);
+    char *shifted_host = reinterpret_cast<char *>(mem.host_pointer) + offset;
+    char *shifted_device = reinterpret_cast<char *>(mem.device_pointer) + offset;
+    bool is_finished_ok = oneapi_dll.oneapi_usm_memcpy(
+        device_queue, shifted_host, shifted_device, size);
     if (is_finished_ok == false) {
       set_error("oneAPI memory operation error: got runtime exception \"" + oneapi_error_string +
                 "\"");
@@ -284,10 +284,8 @@ void OneapiDevice::mem_zero(device_memory &mem)
   }
 
   assert(device_queue);
-  bool is_finished_ok = (oneapi_dll.oneapi_usm_memset)(device_queue,
-                                                       (void *)mem.device_pointer,
-                                                       0,
-                                                       mem.memory_size());
+  bool is_finished_ok = oneapi_dll.oneapi_usm_memset(
+      device_queue, (void *)mem.device_pointer, 0, mem.memory_size());
   if (is_finished_ok == false) {
     set_error("oneAPI memory operation error: got runtime exception \"" + oneapi_error_string +
               "\"");
@@ -315,7 +313,8 @@ void OneapiDevice::mem_free(device_memory &mem)
 
 device_ptr OneapiDevice::mem_alloc_sub_ptr(device_memory &mem, size_t offset, size_t /*size*/)
 {
-  return (device_ptr)(((char *)mem.device_pointer) + mem.memory_elements_size(offset));
+  return reinterpret_cast<device_ptr>(reinterpret_cast<char *>(mem.device_pointer) +
+                                      mem.memory_elements_size(offset));
 }
 
 void OneapiDevice::const_copy_to(const char *name, void *host, size_t size)
@@ -342,10 +341,9 @@ void OneapiDevice::const_copy_to(const char *name, void *host, size_t size)
   memcpy(data->data(), host, size);
   data->copy_to_device();
 
-  (oneapi_dll.oneapi_set_global_memory)(
-      device_queue, kg_memory, name, (void *)data->device_pointer);
+  oneapi_dll.oneapi_set_global_memory(device_queue, kg_memory, name, (void *)data->device_pointer);
 
-  (oneapi_dll.oneapi_usm_memcpy)(device_queue, kg_memory_device, kg_memory, kg_memory_size);
+  oneapi_dll.oneapi_usm_memcpy(device_queue, kg_memory_device, kg_memory, kg_memory_size);
 }
 
 void OneapiDevice::global_alloc(device_memory &mem)
@@ -360,10 +358,10 @@ void OneapiDevice::global_alloc(device_memory &mem)
   generic_alloc(mem);
   generic_copy_to(mem);
 
-  (oneapi_dll.oneapi_set_global_memory)(
+  oneapi_dll.oneapi_set_global_memory(
       device_queue, kg_memory, mem.name, (void *)mem.device_pointer);
 
-  (oneapi_dll.oneapi_usm_memcpy)(device_queue, kg_memory_device, kg_memory, kg_memory_size);
+  oneapi_dll.oneapi_usm_memcpy(device_queue, kg_memory_device, kg_memory, kg_memory_size);
 }
 
 void OneapiDevice::global_free(device_memory &mem)
@@ -378,7 +376,7 @@ void OneapiDevice::tex_alloc(device_texture &mem)
   generic_alloc(mem);
   generic_copy_to(mem);
 
-  // Resize if needed. Also, in case of resize - allocate in advance for future allocs
+  // Resize if needed. Also, in case of resize - allocate in advance for future allocs.
   const uint slot = mem.slot;
   if (slot >= texture_info.size()) {
     texture_info.resize(slot + 128);
@@ -392,6 +390,7 @@ void OneapiDevice::tex_alloc(device_texture &mem)
 
 void OneapiDevice::tex_free(device_texture &mem)
 {
+  // There is no texture memory in SYCL.
   if (mem.device_pointer) {
     generic_free(mem);
   }
@@ -404,21 +403,21 @@ unique_ptr<DeviceQueue> OneapiDevice::gpu_queue_create()
 
 bool OneapiDevice::should_use_graphics_interop()
 {
-  // NOTE(sirgienko) oneAPI doesn't yet support direct writing into graphics API objects, so return
-  // false
+  // NOTE(@nsirgien): oneAPI doesn't yet support direct writing into graphics API objects, so
+  // return false.
   return false;
 }
 
 void *OneapiDevice::usm_aligned_alloc_host(size_t memory_size, size_t alignment)
 {
   assert(device_queue);
-  return (oneapi_dll.oneapi_usm_aligned_alloc_host)(device_queue, memory_size, alignment);
+  return oneapi_dll.oneapi_usm_aligned_alloc_host(device_queue, memory_size, alignment);
 }
 
 void OneapiDevice::usm_free(void *usm_ptr)
 {
   assert(device_queue);
-  return (oneapi_dll.oneapi_usm_free)(device_queue, usm_ptr);
+  return oneapi_dll.oneapi_usm_free(device_queue, usm_ptr);
 }
 
 CCL_NAMESPACE_END

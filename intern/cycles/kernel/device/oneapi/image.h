@@ -4,8 +4,12 @@
 CCL_NAMESPACE_BEGIN
 
 /* For oneAPI implementation we do manual lookup and interpolation. */
+/* TODO: share implementation with ../cpu/image.h. */
 
-#define tex_fetch(type, info, index) ((ccl_global type *)(info.data))[(index)]
+template<typename T> ccl_device_forceinline T tex_fetch(const TextureInfo &info, int index)
+{
+  return reinterpret_cast<ccl_global T *>(info.data)[index];
+}
 
 ccl_device_inline int svm_image_texture_wrap_periodic(int x, int width)
 {
@@ -27,42 +31,42 @@ ccl_device_inline float4 svm_image_texture_read(const TextureInfo &info, int x, 
 
   /* Float4 */
   if (texture_type == IMAGE_DATA_TYPE_FLOAT4) {
-    return tex_fetch(float4, info, data_offset);
+    return tex_fetch<float4>(info, data_offset);
   }
   /* Byte4 */
   else if (texture_type == IMAGE_DATA_TYPE_BYTE4) {
-    uchar4 r = tex_fetch(uchar4, info, data_offset);
+    uchar4 r = tex_fetch<uchar4>(info, data_offset);
     float f = 1.0f / 255.0f;
     return make_float4(r.x * f, r.y * f, r.z * f, r.w * f);
   }
   /* Ushort4 */
   else if (texture_type == IMAGE_DATA_TYPE_USHORT4) {
-    ushort4 r = tex_fetch(ushort4, info, data_offset);
+    ushort4 r = tex_fetch<ushort4>(info, data_offset);
     float f = 1.0f / 65535.f;
     return make_float4(r.x * f, r.y * f, r.z * f, r.w * f);
   }
   /* Float */
   else if (texture_type == IMAGE_DATA_TYPE_FLOAT) {
-    float f = tex_fetch(float, info, data_offset);
+    float f = tex_fetch<float>(info, data_offset);
     return make_float4(f, f, f, 1.0f);
   }
   /* UShort */
   else if (texture_type == IMAGE_DATA_TYPE_USHORT) {
-    ushort r = tex_fetch(ushort, info, data_offset);
+    ushort r = tex_fetch<ushort>(info, data_offset);
     float f = r * (1.0f / 65535.0f);
     return make_float4(f, f, f, 1.0f);
   }
   else if (texture_type == IMAGE_DATA_TYPE_HALF) {
-    float f = tex_fetch(half, info, data_offset);
+    float f = tex_fetch<half>(info, data_offset);
     return make_float4(f, f, f, 1.0f);
   }
   else if (texture_type == IMAGE_DATA_TYPE_HALF4) {
-    half4 r = tex_fetch(half4, info, data_offset);
+    half4 r = tex_fetch<half4>(info, data_offset);
     return make_float4(r.x, r.y, r.z, r.w);
   }
   /* Byte */
   else {
-    uchar r = tex_fetch(uchar, info, data_offset);
+    uchar r = tex_fetch<uchar>(info, data_offset);
     float f = r * (1.0f / 255.0f);
     return make_float4(f, f, f, 1.0f);
   }

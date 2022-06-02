@@ -997,11 +997,7 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
 
   /* NOTE: All threads specified in the mask must execute the intrinsic. */
   const auto can_split_mask = ccl_gpu_ballot(can_split);
-#if !defined(__KERNEL_ONEAPI__) || defined(__SYCL_DEVICE_ONLY__)
   const int lane_id = ccl_gpu_thread_idx_x % ccl_gpu_warp_size;
-#else
-  const int lane_id = 0;
-#endif
   if (lane_id == 0) {
     atomic_fetch_and_add_uint32(num_possible_splits, popcount(can_split_mask));
   }

@@ -73,7 +73,7 @@ bool device_oneapi_init()
   // So it is not unloaded because of this.
   // FREE_SHARED_LIBRARY(lib_handle);
 
-  // NOTE(sirgienko) we need to enable JIT cache from here and
+  // NOTE(@nsirgien): we need to enable JIT cache from here and
   // right now this cache policy is controlled by env. variables
   // NOTE(hallade) we also disable use of copy engine as it
   // improves stability as of intel/llvm sycl-nightly/20220529.
@@ -132,7 +132,7 @@ static void device_iterator_cb(const char *id, const char *name, int num, void *
   info.description = name;
   info.num = num;
 
-  // NOTE(sirgienko) Should be unique at least on proper oneapi installation
+  // NOTE(@nsirgien): Should be unique at least on proper oneapi installation
   info.id = id;
 
   info.has_nanovdb = true;
@@ -140,11 +140,11 @@ static void device_iterator_cb(const char *id, const char *name, int num, void *
 
   info.has_gpu_queue = true;
 
-  // NOTE(sirgienko) oneAPI right now is focused on one device usage. In future it maybe will
+  // NOTE(@nsirgien): oneAPI right now is focused on one device usage. In future it maybe will
   // change, but right now peer access from one device to another device is not supported
   info.has_peer_memory = false;
 
-  // NOTE(sirgienko) Seems not possible to know from SYCL/oneAPI or Level0.
+  // NOTE(@nsirgien): Seems not possible to know from SYCL/oneAPI or Level0.
   info.display_device = false;
 
   devices->push_back(info);

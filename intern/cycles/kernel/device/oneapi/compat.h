@@ -18,10 +18,6 @@
 #  define __NODES_FEATURES__ NODE_FEATURE_ALL
 #endif
 
-// It's not possible use sycl types like sycl::float4, sycl::int4, etc
-// because these types have different interface from blender versions,
-// so it's easier to use Blender versions of these types
-
 /* This one does not have an abstraction.
  * It's used by other devices directly.
  */
@@ -153,12 +149,15 @@ void oneapi_kernel_##name(KernelGlobalsGPU *ccl_restrict kg, \
 // clang-format on
 
 /* Types */
-typedef unsigned char uchar;
+/* It's not possible to use sycl types like sycl::float3, sycl::int3, etc
+ * because these types have different interfaces from blender version */
+
+using uchar = unsigned char;
 using sycl::half;
 
-typedef struct float3 {
+struct float3 {
   float x, y, z;
-} float3;
+};
 
 ccl_always_inline float3 make_float3(float x, float y, float z)
 {
@@ -193,8 +192,7 @@ ccl_always_inline float3 make_float3(float x)
 #include "util/half.h"
 #include "util/types.h"
 
-
-// NOTE(sirgienko) Declaring these functions after types headers is very important because they
+// NOTE(@nsirgien): Declaring these functions after types headers is very important because they
 // include oneAPI headers, which transitively include math.h headers which will cause redefintions
 // of the math defines because math.h also uses them and having them defined before math.h include
 // - it actually UB

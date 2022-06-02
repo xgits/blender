@@ -825,8 +825,7 @@ ccl_device_inline uint count_trailing_zeros(uint x)
 #elif defined(__KERNEL_METAL__)
   return ctz(x);
 #elif defined(__KERNEL_ONEAPI__)
-  // TODO(sirgienko) Replace with sycl::ctz, when it will be available in DPC++
-  return (31 - count_leading_zeros(x & -x));
+  return sycl::ctz(x);
 #else
   assert(x != 0);
 #  ifdef _MSC_VER

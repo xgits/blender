@@ -24,7 +24,7 @@ DLL_INTERFACE_CALL(oneapi_usm_memset,
                    unsigned char value,
                    size_t num_bytes)
 
-DLL_INTERFACE_CALL(oneapi_trigger_runtime_compilation, bool, SyclQueue *queue)
+DLL_INTERFACE_CALL(oneapi_run_test_kernel, bool, SyclQueue *queue)
 
 // Operation with Kernel globals structure - map of global/constant allocation, which filles before
 // render/kernel execution As we don't know in cycles sizeof this - Cycles will manage just as

@@ -9,10 +9,9 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* NOTE(sirgienko) With SYCL we can't declare __constant__ global variable, which will accessable
-   from devece code, like it have done for Cycles CUDA backend. So, the backend will allocate this
-   "constant" memory regions and store pointers to them in oneAPI context class
-*/
+/* NOTE(@nsirgien): With SYCL we can't declare __constant__ global variable, which will be
+ * accessible from device code, like it has been done for Cycles CUDA backend. So, the backend will
+ * allocate this "constant" memory regions and store pointers to them in oneAPI context class */
 
 struct IntegratorStateGPU;
 struct IntegratorQueueCounter;

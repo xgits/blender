@@ -32,35 +32,17 @@ void oneapi_set_error_cb(OneAPIErrorCallback cb, void *user_ptr)
   s_error_user_ptr = user_ptr;
 }
 
-bool is_gpu(sycl::queue *queue);
-
-bool is_gpu(sycl::queue *queue)
-{
-  sycl::info::device_type device_type =
-      queue->get_device().get_info<sycl::info::device::device_type>();
-  return device_type == sycl::info::device_type::gpu;
-}
-
-bool is_cpu(sycl::queue *queue);
-
-bool is_cpu(sycl::queue *queue)
-{
-  sycl::info::device_type device_type =
-      queue->get_device().get_info<sycl::info::device::device_type>();
-  return device_type == sycl::info::device_type::cpu;
-}
-
-void check_usm(SyclQueue *queue_, const void *usm_ptr, bool allow_host = false);
-
-void check_usm(SyclQueue *queue_, const void *usm_ptr, bool allow_host)
+void oneapi_check_usm(SyclQueue *queue_, const void *usm_ptr, bool allow_host = false)
 {
 #  ifdef _DEBUG
   sycl::queue *queue = reinterpret_cast<sycl::queue *>(queue_);
+  sycl::info::device_type device_type =
+      queue->get_device().get_info<sycl::info::device::device_type>();
   sycl::usm::alloc usm_type = get_pointer_type(usm_ptr, queue->get_context());
   (void)usm_type;
   assert(
       usm_type == sycl::usm::alloc::device ||
-      ((queue->is_host() || is_cpu(queue) || allow_host) && usm_type == sycl::usm::alloc::host));
+      ((device_type == sycl::info::device_type::host || (device_type == sycl::info::device_type::is_cpu || allow_host) && usm_type == sycl::usm::alloc::host));
 #  endif
 }
 
@@ -110,7 +92,7 @@ void oneapi_usm_free(SyclQueue *queue_, void *usm_ptr)
 {
   assert(queue_);
   sycl::queue *queue = reinterpret_cast<sycl::queue *>(queue_);
-  check_usm(queue_, usm_ptr, true);
+  oneapi_check_usm(queue_, usm_ptr, true);
   sycl::free(usm_ptr, *queue);
 }
 
@@ -118,8 +100,8 @@ bool oneapi_usm_memcpy(SyclQueue *queue_, void *dest, void *src, size_t num_byte
 {
   assert(queue_);
   sycl::queue *queue = reinterpret_cast<sycl::queue *>(queue_);
-  check_usm(queue_, dest, true);
-  check_usm(queue_, src, true);
+  oneapi_check_usm(queue_, dest, true);
+  oneapi_check_usm(queue_, src, true);
   try {
     sycl::event mem_event = queue->memcpy(dest, src, num_bytes);
     mem_event.wait_and_throw();
@@ -137,7 +119,7 @@ bool oneapi_usm_memset(SyclQueue *queue_, void *usm_ptr, unsigned char value, si
 {
   assert(queue_);
   sycl::queue *queue = reinterpret_cast<sycl::queue *>(queue_);
-  check_usm(queue_, usm_ptr, true);
+  oneapi_check_usm(queue_, usm_ptr, true);
   try {
     sycl::event mem_event = queue->memset(usm_ptr, value, num_bytes);
     mem_event.wait_and_throw();
@@ -167,10 +149,10 @@ bool oneapi_queue_synchronize(SyclQueue *queue_)
   }
 }
 
-bool oneapi_trigger_runtime_compilation(SyclQueue *queue_)
+/* NOTE(@nsirgien): Execution of this simple kernel will check basic functionality and
+ * also trigger runtime compilation of all existing oneAPI kernels */
+bool oneapi_run_test_kernel(SyclQueue *queue_)
 {
-  // NOTE(sirgienko) Execution of this simple kernel will check basic functionality and
-  // also trigger runtime compilation of all existing oneAPI kernels
   assert(queue_);
   sycl::queue *queue = reinterpret_cast<sycl::queue *>(queue_);
   size_t N = 8;
@@ -227,8 +209,8 @@ void oneapi_set_global_memory(SyclQueue *queue_,
   assert(memory_name);
   assert(memory_device_pointer);
   KernelGlobalsGPU *globals = (KernelGlobalsGPU *)kernel_globals;
-  check_usm(queue_, memory_device_pointer);
-  check_usm(queue_, kernel_globals, true);
+  oneapi_check_usm(queue_, memory_device_pointer);
+  oneapi_check_usm(queue_, kernel_globals, true);
 
   std::string matched_name(memory_name);
 
@@ -256,6 +238,8 @@ void oneapi_set_global_memory(SyclQueue *queue_,
 #  undef KERNEL_TEX
 }
 
+// TODO: Move device information to OneapiDevice initialized on creation and use it.
+// TODO: Move below function to oneapi/queue.cpp
 size_t oneapi_kernel_preferred_local_size(SyclQueue *queue_,
                                           const DeviceKernel kernel,
                                           const size_t kernel_global_size)
@@ -333,8 +317,9 @@ bool oneapi_enqueue_kernel(KernelContext *kernel_context,
       device_kernel == DEVICE_KERNEL_INTEGRATOR_COMPACT_PATHS_ARRAY ||
       device_kernel == DEVICE_KERNEL_INTEGRATOR_COMPACT_SHADOW_PATHS_ARRAY) {
     int num_states = *((int *)(args[0]));
-    size_t groups_count = num_states / local_size + (num_states % local_size == 0 ? 0 : 1);
-    /* NOTE(sirgienko) Because for now non-uniform workgroups don't work on most of
+    // Round up to the next work-group
+    size_t groups_count = (num_states + local_size - 1) / local_size;
+    /* NOTE(@nsirgien): Because for now non-uniform workgroups don't work on most of
        oneAPI devices,here ise xtending of work size to match uniform requirements  */
     global_size = groups_count * local_size;
 
@@ -848,8 +833,8 @@ char *oneapi_device_capabilities()
     GET_NUM_ATTR(address_bits)
     GET_NUM_ATTR(max_mem_alloc_size)
 
-    // NOTE(sirgienko) Implementation doesn't use image support as bindless images aren't supported
-    // so we always return false, even if device supports HW texture usage acceleration
+    // NOTE(@nsirgien): Implementation doesn't use image support as bindless images aren't
+    // supported so we always return false, even if device supports HW texture usage acceleration
     bool image_support = false;
     WRITE_ATTR("image_support", (size_t)image_support)
 

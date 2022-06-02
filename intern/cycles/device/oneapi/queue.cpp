@@ -19,6 +19,7 @@ struct KernelExecutionInfo {
   int enqueue_count = 0;
 };
 
+// TODO: Use or extend base Queue implementation for statistics.
 struct OneapiKernelStats {
   OneapiKernelStats(){};
   ~OneapiKernelStats()
@@ -97,9 +98,7 @@ OneapiDeviceQueue::OneapiDeviceQueue(OneapiDevice *device)
 
 OneapiDeviceQueue::~OneapiDeviceQueue()
 {
-  if (kernel_context_) {
-    delete kernel_context_;
-  }
+  delete kernel_context_;
 
   if (with_kernel_statistics_) {
     global_kernel_stats.print_and_reset();
@@ -110,8 +109,9 @@ int OneapiDeviceQueue::num_concurrent_states(const size_t state_size) const
 {
   int num_states;
 
-  const size_t compute_units =
-      (oneapi_dll_.oneapi_get_compute_units_amount)(oneapi_device_->sycl_queue());
+  // TODO: implement and use get_num_multiprocessors and get_max_num_threads_per_multiprocessor.
+  const size_t compute_units = oneapi_dll_.oneapi_get_compute_units_amount(
+      oneapi_device_->sycl_queue());
   if (compute_units >= 128) {
     // dGPU path, make sense to allocate more states, because it will be dedicated GPU memory
     int base = 1024 * 1024;
@@ -120,6 +120,9 @@ int OneapiDeviceQueue::num_concurrent_states(const size_t state_size) const
 
     // Limit amount of integrator states by one quarter of device memory, because
     // other allocations will need some space as well
+    // TODO: base this calculation on the how many states what the GPU is actually capable of
+    // running, with some headroom to improve occupancy. If the texture don't fit, offload into
+    // unified memory.
     size_t states_memory_size = num_states * state_size;
     size_t device_memory_amount =
         (oneapi_dll_.oneapi_get_memcapacity)(oneapi_device_->sycl_queue());
@@ -141,8 +144,8 @@ int OneapiDeviceQueue::num_concurrent_states(const size_t state_size) const
 
 int OneapiDeviceQueue::num_concurrent_busy_states() const
 {
-  const size_t compute_units =
-      (oneapi_dll_.oneapi_get_compute_units_amount)(oneapi_device_->sycl_queue());
+  const size_t compute_units = oneapi_dll_.oneapi_get_compute_units_amount(
+      oneapi_device_->sycl_queue());
   if (compute_units >= 128) {
     return 1024 * 1024;
   }
@@ -178,10 +181,8 @@ bool OneapiDeviceQueue::enqueue(DeviceKernel kernel,
   assert(signed_kernel_work_size >= 0);
   size_t kernel_work_size = (size_t)signed_kernel_work_size;
 
-  size_t kernel_local_size =
-      (oneapi_dll_.oneapi_kernel_preferred_local_size)(kernel_context_->queue,
-                                                       (::DeviceKernel)kernel,
-                                                       kernel_work_size);
+  size_t kernel_local_size = oneapi_dll_.oneapi_kernel_preferred_local_size(
+      kernel_context_->queue, (::DeviceKernel)kernel, kernel_work_size);
   size_t uniformed_kernel_work_size = round_up(kernel_work_size, kernel_local_size);
 
   assert(kernel_context_);
@@ -190,10 +191,8 @@ bool OneapiDeviceQueue::enqueue(DeviceKernel kernel,
     global_kernel_stats.kernel_enqueued(kernel);
 
   /* Call the oneAPI kernel DLL to launch the requested kernel. */
-  bool is_finished_ok = (oneapi_dll_.oneapi_enqueue_kernel)(kernel_context_,
-                                                            kernel,
-                                                            uniformed_kernel_work_size,
-                                                            args);
+  bool is_finished_ok = oneapi_dll_.oneapi_enqueue_kernel(
+      kernel_context_, kernel, uniformed_kernel_work_size, args);
 
   if (with_kernel_statistics_)
     global_kernel_stats.kernel_finished(kernel, uniformed_kernel_work_size);
@@ -213,7 +212,7 @@ bool OneapiDeviceQueue::synchronize()
     return false;
   }
 
-  bool is_finished_ok = (oneapi_dll_.oneapi_queue_synchronize)(oneapi_device_->sycl_queue());
+  bool is_finished_ok = oneapi_dll_.oneapi_queue_synchronize(oneapi_device_->sycl_queue());
   if (is_finished_ok == false)
     oneapi_device_->set_error("oneAPI unknown kernel execution error: got runtime exception \"" +
                               oneapi_device_->oneapi_error_message() + "\"");

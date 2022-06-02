@@ -256,9 +256,11 @@ void lineart_edge_cut(LineartRenderBuffer *rb,
     if (cut_start_before != ns) {
       /* Insert cutting points for when a new cut is needed. */
       ies = cut_start_before->prev ? cut_start_before->prev : NULL;
-      ns->occlusion = ies ? ies->occlusion : 0;
-      ns->material_mask_bits = ies->material_mask_bits;
-      ns->shadow_mask_bits = ies->shadow_mask_bits;
+      if (ies) {
+        ns->occlusion = ies->occlusion;
+        ns->material_mask_bits = ies->material_mask_bits;
+        ns->shadow_mask_bits = ies->shadow_mask_bits;
+      }
       BLI_insertlinkbefore(&e->segments, cut_start_before, ns);
     }
     /* Otherwise we already found a existing cutting point, no need to insert a new one. */
@@ -276,9 +278,11 @@ void lineart_edge_cut(LineartRenderBuffer *rb,
     /* The same manipulation as on "cut_start_before". */
     if (cut_end_before != ns2) {
       ies = cut_end_before->prev ? cut_end_before->prev : NULL;
-      ns2->occlusion = ies ? ies->occlusion : 0;
-      ns2->material_mask_bits = ies ? ies->material_mask_bits : 0;
-      ns2->shadow_mask_bits = ies ? ies->shadow_mask_bits : 0;
+      if (ies) {
+        ns2->occlusion = ies->occlusion;
+        ns2->material_mask_bits = ies->material_mask_bits;
+        ns2->shadow_mask_bits = ies->shadow_mask_bits;
+      }
       BLI_insertlinkbefore(&e->segments, cut_end_before, ns2);
     }
   }
@@ -287,7 +291,9 @@ void lineart_edge_cut(LineartRenderBuffer *rb,
     ns2->occlusion = ies->occlusion;
     ns2->material_mask_bits = ies->material_mask_bits;
     ns2->shadow_mask_bits = ies->shadow_mask_bits;
-    BLI_addtail(&e->segments, ns2);
+    if (!untouched) {
+      BLI_addtail(&e->segments, ns2);
+    }
   }
 
   /* If we touched the cut list, we assign the new cut position based on new cut position,

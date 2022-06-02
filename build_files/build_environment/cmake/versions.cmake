@@ -503,9 +503,9 @@ set(LEVEL_ZERO_HASH c39bb05a8e5898aa6c444e1704105b93d3f1888b9c333f8e7e73825ffbfb
 set(LEVEL_ZERO_HASH_TYPE SHA256)
 set(LEVEL_ZERO_FILE level-zero-${LEVEL_ZERO_VERSION}.tar.gz)
 
-set(DPCPP_VERSION 20220208)
+set(DPCPP_VERSION 20220529)
 set(DPCPP_URI https://github.com/intel/llvm/archive/refs/tags/sycl-nightly/${DPCPP_VERSION}.tar.gz)
-set(DPCPP_HASH 16ac229cbc15bfa04e4c67ceedd102243c7df6c347a37098d7f68da9cf2b0b3e)
+set(DPCPP_HASH 1a9b95b4fd589e97dc7ce8bad24909d79605ffcafd5c68ef5bdad8c1eeefcafd)
 set(DPCPP_HASH_TYPE SHA256)
 set(DPCPP_FILE DPCPP-${DPCPP_VERSION}.tar.gz)
 

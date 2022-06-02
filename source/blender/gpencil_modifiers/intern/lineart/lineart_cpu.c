@@ -2614,6 +2614,9 @@ void lineart_main_load_geometries(Depsgraph *depsgraph,
   /* XXX(Yiming): Temporary solution, this iterator is technially unsafe to use *during* depsgraph
    * evaluation, see https://developer.blender.org/D14997 for detailed explainations. */
   DEG_OBJECT_ITER_BEGIN (depsgraph, ob, flags) {
+
+    obindex++;
+
     Object *eval_ob = DEG_get_evaluated_object(depsgraph, ob);
 
     if (!eval_ob) {

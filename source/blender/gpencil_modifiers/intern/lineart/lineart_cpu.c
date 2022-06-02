@@ -2603,14 +2603,26 @@ void lineart_main_load_geometries(Depsgraph *depsgraph,
   eEvaluationMode eval_mode = DEG_get_mode(depsgraph);
   bool is_render = eval_mode == DAG_EVAL_RENDER;
 
-  FOREACH_SCENE_OBJECT_BEGIN (scene, ob) {
-    /* Do the increment even for discarded objects, so that in different culling conditions we can
-     * get the same reference to the same object. */
-    obindex++;
+  int flags = DEG_ITER_OBJECT_FLAG_LINKED_DIRECTLY | DEG_ITER_OBJECT_FLAG_LINKED_VIA_SET |
+              DEG_ITER_OBJECT_FLAG_VISIBLE;
 
+  /* Instance duplicated & particles. */
+  if (allow_duplicates) {
+    flags |= DEG_ITER_OBJECT_FLAG_DUPLI;
+  }
+
+  /* XXX(Yiming): Temporary solution, this iterator is technially unsafe to use *during* depsgraph
+   * evaluation, see https://developer.blender.org/D14997 for detailed explainations. */
+  DEG_OBJECT_ITER_BEGIN (depsgraph, ob, flags) {
     Object *eval_ob = DEG_get_evaluated_object(depsgraph, ob);
 
     if (!eval_ob) {
+      continue;
+    }
+
+    /* DEG_OBJECT_ITER_BEGIN will include the instanced mesh of these curve object types, so don't
+     * load them twice. */
+    if (allow_duplicates && ELEM(ob->type, OB_CURVES_LEGACY, OB_FONT, OB_SURF)) {
       continue;
     }
 
@@ -2626,29 +2638,8 @@ void lineart_main_load_geometries(Depsgraph *depsgraph,
                                           thread_count,
                                           obindex);
     }
-    if (allow_duplicates) {
-      ListBase *dupli = object_duplilist(depsgraph, scene, eval_ob);
-      LISTBASE_FOREACH (DupliObject *, dob, dupli) {
-        obindex++;
-        if (BKE_object_visibility(eval_ob, eval_mode) &
-            (OB_VISIBLE_PARTICLES | OB_VISIBLE_INSTANCES)) {
-          Object *ob_ref = (dob->type & OB_DUPLIPARTS) ? eval_ob : dob->ob;
-          lineart_object_load_single_instance(rb,
-                                              depsgraph,
-                                              scene,
-                                              dob->ob,
-                                              ob_ref,
-                                              dob->mat,
-                                              is_render,
-                                              olti,
-                                              thread_count,
-                                              obindex);
-        }
-      }
-      free_object_duplilist(dupli);
-    }
   }
-  FOREACH_SCENE_OBJECT_END;
+  DEG_OBJECT_ITER_END;
 
   TaskPool *tp = BLI_task_pool_create(NULL, TASK_PRIORITY_HIGH);
 

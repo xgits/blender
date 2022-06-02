@@ -72,17 +72,13 @@ int count_node_pixels(PBVHNode &node)
 }
 
 struct SplitQueueData {
-  ThreadQueue *queue;
   ThreadQueue *new_nodes;
-  int thread_num;
+  TaskPool *pool;
 
   PBVH *pbvh;
   Mesh *mesh;
   Image *image;
   ImageUser *image_user;
-
-  std::atomic<bool> *working;
-  std::atomic<int> *nodes_num;
 };
 
 struct SplitNodePair {
@@ -92,12 +88,15 @@ struct SplitNodePair {
   int depth = 0;
   int source_index = -1;
   bool is_old = false;
+  SplitQueueData *tdata;
 
   SplitNodePair(SplitNodePair *node_parent = nullptr) : parent(node_parent)
   {
     memset(static_cast<void *>(&node), 0, sizeof(PBVHNode));
   }
 };
+
+static void split_thread_job(TaskPool *__restrict pool, void *taskdata);
 
 static void split_pixel_node(PBVH *pbvh,
                              SplitNodePair *split,
@@ -110,8 +109,6 @@ static void split_pixel_node(PBVH *pbvh,
   PBVHNode *node = &split->node;
 
   cb = node->vb;
-
-  tdata->nodes_num->fetch_add(2);
 
   if (count_node_pixels(*node) <= pbvh->pixel_leaf_limit || split->depth >= pbvh->depth_limit) {
     BKE_pbvh_pixels_node_data_get(split->node).rebuild_undo_regions();
@@ -255,8 +252,8 @@ static void split_pixel_node(PBVH *pbvh,
   BLI_thread_queue_push(tdata->new_nodes, static_cast<void *>(split1));
   BLI_thread_queue_push(tdata->new_nodes, static_cast<void *>(split2));
 
-  BLI_thread_queue_push(tdata->queue, static_cast<void *>(split1));
-  BLI_thread_queue_push(tdata->queue, static_cast<void *>(split2));
+  BLI_task_pool_push(tdata->pool, split_thread_job, static_cast<void *>(split1), false, nullptr);
+  BLI_task_pool_push(tdata->pool, split_thread_job, static_cast<void *>(split2), false, nullptr);
 }
 
 static void split_flush_final_nodes(SplitQueueData *tdata)
@@ -296,41 +293,13 @@ static void split_flush_final_nodes(SplitQueueData *tdata)
   }
 }
 
-extern "C" static void split_thread_job(TaskPool *__restrict pool, void *taskdata)
+static void split_thread_job(TaskPool *__restrict pool, void *taskdata)
 {
+
   SplitQueueData *tdata = static_cast<SplitQueueData *>(BLI_task_pool_user_data(pool));
-  int thread_nr = POINTER_AS_UINT(taskdata);
+  SplitNodePair *split = static_cast<SplitNodePair *>(taskdata);
 
-  tdata->working[thread_nr].store(false);
-
-  while (1) {
-    void *work = BLI_thread_queue_pop_timeout(tdata->queue, 1);
-
-    if (work) {
-      SplitNodePair *split = static_cast<SplitNodePair *>(work);
-
-      /* Signal to other threads that we are working, needed to prevent
-         premature task exit when the queue is temporarily empty. */
-      tdata->working[thread_nr].store(true);
-      split_pixel_node(tdata->pbvh, split, tdata->mesh, tdata->image, tdata->image_user, tdata);
-      tdata->working[thread_nr].store(false);
-      continue;
-    }
-
-    bool ok = true;
-
-    for (int i : IndexRange(tdata->thread_num)) {
-      if (tdata->working[i].load()) {
-        ok = false;
-        break;
-      }
-    }
-
-    /* No nodes left in queue? End task. */
-    if (ok) {
-      break;
-    }
-  }
+  split_pixel_node(tdata->pbvh, split, tdata->mesh, tdata->image, tdata->image_user, tdata);
 }
 
 static void split_pixel_nodes(PBVH *pbvh, Mesh *mesh, Image *image, ImageUser *image_user)
@@ -348,15 +317,14 @@ static void split_pixel_nodes(PBVH *pbvh, Mesh *mesh, Image *image, ImageUser *i
   }
 
   SplitQueueData tdata;
+  TaskPool *pool = BLI_task_pool_create_suspended(&tdata, TASK_PRIORITY_HIGH);
 
-  tdata.nodes_num = MEM_new<std::atomic<int>>("tdata.nodes_num");
-  tdata.nodes_num->store(pbvh->totnode);
+  tdata.pool = pool;
   tdata.pbvh = pbvh;
   tdata.mesh = mesh;
   tdata.image = image;
   tdata.image_user = image_user;
 
-  tdata.queue = BLI_thread_queue_init();
   tdata.new_nodes = BLI_thread_queue_init();
 
   /* Set up initial jobs before initializing threads. */
@@ -367,23 +335,12 @@ static void split_pixel_nodes(PBVH *pbvh, Mesh *mesh, Image *image, ImageUser *i
       split->source_index = i;
       split->is_old = true;
       split->node = pbvh->nodes[i];
+      split->tdata = &tdata;
 
-      BLI_thread_queue_push(tdata.queue, static_cast<void *>(split));
+      BLI_task_pool_push(pool, split_thread_job, static_cast<void *>(split), false, nullptr);
+
       BLI_thread_queue_push(tdata.new_nodes, static_cast<void *>(split));
     }
-  }
-
-  int thread_num = tdata.thread_num = G.debug_value != 892 ? BLI_system_thread_count() : 1;
-  tdata.working = new std::atomic<bool>[thread_num];
-
-#if 0
-  TaskPool *pool = BLI_task_pool_create_no_threads(&tdata);
-#else
-  TaskPool *pool = BLI_task_pool_create_suspended(&tdata, TASK_PRIORITY_HIGH);
-#endif
-
-  for (int i : IndexRange(thread_num)) {
-    BLI_task_pool_push(pool, split_thread_job, POINTER_FROM_UINT(i), false, nullptr);
   }
 
   BLI_task_pool_work_and_wait(pool);
@@ -391,12 +348,7 @@ static void split_pixel_nodes(PBVH *pbvh, Mesh *mesh, Image *image, ImageUser *i
 
   split_flush_final_nodes(&tdata);
 
-  delete[] tdata.working;
-
-  BLI_thread_queue_free(tdata.queue);
   BLI_thread_queue_free(tdata.new_nodes);
-
-  MEM_delete<std::atomic<int>>(tdata.nodes_num);
 }
 
 /**

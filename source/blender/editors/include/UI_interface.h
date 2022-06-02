@@ -461,7 +461,7 @@ enum {
 void UI_draw_widget_scroll(struct uiWidgetColors *wcol,
                            const struct rcti *rect,
                            const struct rcti *slider,
-                           uint64_t state);
+                           int state);
 
 /**
  * Shortening string helper.
@@ -886,9 +886,9 @@ uiBut *UI_but_active_drop_name_button(const struct bContext *C);
 bool UI_but_active_drop_name(const struct bContext *C);
 bool UI_but_active_drop_color(struct bContext *C);
 
-void UI_but_flag_enable(uiBut *but, uint64_t flag);
-void UI_but_flag_disable(uiBut *but, uint64_t flag);
-bool UI_but_flag_is_set(uiBut *but, uint64_t flag);
+void UI_but_flag_enable(uiBut *but, int flag);
+void UI_but_flag_disable(uiBut *but, int flag);
+bool UI_but_flag_is_set(uiBut *but, int flag);
 
 void UI_but_drawflag_enable(uiBut *but, int flag);
 void UI_but_drawflag_disable(uiBut *but, int flag);
@@ -1632,7 +1632,7 @@ eAutoPropButsReturn uiDefAutoButsRNA(uiLayout *layout,
  * callback returns true, the given buttons are considered to be matching and relevant state is
  * preserved (copied from the old to the new button). If it returns false, it's considered
  * non-matching and no further checks are done.
- *\
+ *
  * If this is set, it is always executed instead of the default comparisons. However it is only
  * executed for buttons that have the same type and the same callback. So callbacks can assume the
  * button types match.

@@ -114,6 +114,7 @@ static void split_pixel_node(PBVH *pbvh,
   tdata->nodes_num->fetch_add(2);
 
   if (count_node_pixels(*node) <= pbvh->pixel_leaf_limit || split->depth >= pbvh->depth_limit) {
+    BKE_pbvh_pixels_node_data_get(split->node).rebuild_undo_regions();
     return;
   }
 
@@ -248,6 +249,8 @@ static void split_pixel_node(PBVH *pbvh,
   else {
     pbvh_pixels_free(node);
   }
+
+  data.undo_regions.clear();
 
   BLI_thread_queue_push(tdata->new_nodes, static_cast<void *>(split1));
   BLI_thread_queue_push(tdata->new_nodes, static_cast<void *>(split2));

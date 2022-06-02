@@ -204,6 +204,10 @@ void *ED_image_paint_tile_push(ListBase *paint_tiles,
   ptile->x_tile = x_tile;
   ptile->y_tile = y_tile;
 
+  if (x_tile < 0 || y_tile < 0 || x_tile >= 1000 || y_tile >= 1000) {
+    printf("error!\n");
+  }
+
   /* add mask explicitly here */
   if (r_mask) {
     *r_mask = ptile->mask = MEM_callocN(sizeof(ushort) * square_i(ED_IMAGE_UNDO_TILE_SIZE),

@@ -1697,6 +1697,7 @@ enum {
   OL_OP_SELECT = 1,
   OL_OP_DESELECT,
   OL_OP_SELECT_HIERARCHY,
+  OL_OP_REMAP,
   OL_OP_RENAME,
 };
 
@@ -1704,6 +1705,11 @@ static const EnumPropertyItem prop_object_op_types[] = {
     {OL_OP_SELECT, "SELECT", ICON_RESTRICT_SELECT_OFF, "Select", ""},
     {OL_OP_DESELECT, "DESELECT", 0, "Deselect", ""},
     {OL_OP_SELECT_HIERARCHY, "SELECT_HIERARCHY", 0, "Select Hierarchy", ""},
+    {OL_OP_REMAP,
+     "REMAP",
+     0,
+     "Remap Users",
+     "Make all users of selected data-blocks to use instead a new chosen one"},
     {OL_OP_RENAME, "RENAME", 0, "Rename", ""},
     {0, nullptr, 0, nullptr, nullptr},
 };
@@ -1979,6 +1985,7 @@ enum eOutlinerIdOpTypes {
   OUTLINER_IDOP_OVERRIDE_LIBRARY_CLEAR_SINGLE,
   OUTLINER_IDOP_SINGLE,
   OUTLINER_IDOP_DELETE,
+  OUTLINER_IDOP_REMAP,
 
   OUTLINER_IDOP_COPY,
   OUTLINER_IDOP_PASTE,

@@ -282,19 +282,6 @@ void pbvh_pixels_free(PBVHNode *node);
 void pbvh_pixels_free_brush_test(PBVHNode *node);
 void pbvh_free_draw_buffers(PBVH *pbvh, PBVHNode *node);
 
-
-/* Disable optimization for a function (for debugging use only!)*/
-#ifdef __clang__
-#  define ATTR_NO_OPT __attribute__((optnone))
-#elif defined(_MSC_VER)
-#  define ATTR_NO_OPT __pragma(optimize("", off))
-#elif defined(__GNUC__)
-#  define ATTR_NO_OPT __attribute__((optimize("O0")))
-#else
-#  define ATTR_NO_OPT
-#endif
-
-
 #ifdef __cplusplus
 }
 #endif

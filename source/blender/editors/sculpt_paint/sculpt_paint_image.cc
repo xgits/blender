@@ -540,6 +540,7 @@ void SCULPT_do_paint_brush_image(PaintModeSettings *paint_mode_settings,
   BLI_task_parallel_range(0, texnodes_num, &data, do_paint_pixels, &settings);
 
   TaskParallelSettings settings_flush;
+
   BKE_pbvh_parallel_range_settings(&settings_flush, false, texnodes_num);
   BLI_task_parallel_range(0, texnodes_num, &data, do_mark_dirty_regions, &settings_flush);
 }

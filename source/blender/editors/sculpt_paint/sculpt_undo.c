@@ -1810,7 +1810,7 @@ static UndoSculpt *sculpt_undo_get_nodes(void)
 {
   UndoStack *ustack = ED_undo_stack_get();
   UndoStep *us = BKE_undosys_stack_init_or_active_with_type(ustack, BKE_UNDOSYS_TYPE_SCULPT);
-  return sculpt_undosys_step_get_nodes(us);
+  return us ? sculpt_undosys_step_get_nodes(us) : NULL;
 }
 
 /** \} */

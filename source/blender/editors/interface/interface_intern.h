@@ -721,7 +721,7 @@ extern void ui_but_active_string_clear_and_exit(struct bContext *C, uiBut *but) 
 extern void ui_but_set_string_interactive(struct bContext *C, uiBut *but, const char *value);
 extern uiBut *ui_but_drag_multi_edit_get(uiBut *but);
 
-void ui_def_but_icon(uiBut *but, int icon, uint64_t flag);
+void ui_def_but_icon(uiBut *but, int icon, int flag);
 /**
  * Avoid using this where possible since it's better not to ask for an icon in the first place.
  */
@@ -1438,8 +1438,8 @@ uiBlock *ui_block_find_mouse_over(const struct ARegion *region,
                                   bool only_clip);
 
 uiBut *ui_region_find_first_but_test_flag(struct ARegion *region,
-                                          uint64_t flag_include,
-                                          uint64_t flag_exclude);
+                                          int flag_include,
+                                          int flag_exclude);
 uiBut *ui_region_find_active_but(struct ARegion *region) ATTR_WARN_UNUSED_RESULT;
 bool ui_region_contains_point_px(const struct ARegion *region, const int xy[2])
     ATTR_NONNULL(1, 2) ATTR_WARN_UNUSED_RESULT;

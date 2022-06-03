@@ -63,6 +63,11 @@ class OneapiDevice : public Device {
 
   void mem_copy_from(device_memory &mem, size_t y, size_t w, size_t h, size_t elem) override;
 
+  void mem_copy_from(device_memory &mem)
+  {
+    mem_copy_from(mem, 0, 0, 0, 0);
+  }
+
   void mem_zero(device_memory &mem) override;
 
   void mem_free(device_memory &mem) override;

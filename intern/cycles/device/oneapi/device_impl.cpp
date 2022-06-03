@@ -243,7 +243,7 @@ void OneapiDevice::mem_copy_from(device_memory &mem, size_t y, size_t w, size_t 
     assert(!"mem_copy_from not supported for textures.");
   }
   else if (mem.host_pointer) {
-    const size_t size = elem * w * h;
+    const size_t size = (w > 0 || h > 0 || elem > 0) ? (elem * w * h) : mem.memory_size();
     const size_t offset = elem * y * w;
 
     if (mem.name) {

@@ -37,8 +37,6 @@ struct KernelContext {
   SyclQueue *queue;
   // Pointer to USM device memory with all global/constant allocation on this device
   void *kernel_globals;
-  // true, if Blender user have requested per-kernel statistics, overwise false
-  bool with_per_kernel_statistics;
 };
 
 /* Use extern C linking so that the symbols can be easily load from the dynamic library at runtime.

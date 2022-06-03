@@ -19,67 +19,6 @@ struct KernelExecutionInfo {
   int enqueue_count = 0;
 };
 
-// TODO: Use or extend base Queue implementation for statistics.
-struct OneapiKernelStats {
-  OneapiKernelStats(){};
-  ~OneapiKernelStats()
-  {
-  }
-
-  void print_and_reset()
-  {
-    if (stats_data.size() != 0) {
-      std::vector<std::pair<DeviceKernel, KernelExecutionInfo>> stats_sorted;
-      for (const auto &stat : stats_data) {
-        stats_sorted.push_back(stat);
-      }
-
-      sort(stats_sorted.begin(),
-           stats_sorted.end(),
-           [](const std::pair<DeviceKernel, KernelExecutionInfo> &a,
-              const std::pair<DeviceKernel, KernelExecutionInfo> &b) {
-             return a.second.elapsed_summary > b.second.elapsed_summary;
-           });
-
-      VLOG(1) << "oneAPI execution kernels statistics:";
-      double summary = 0.0;
-      for (const std::pair<DeviceKernel, KernelExecutionInfo> &iter : stats_sorted) {
-        VLOG(1) << "  " << std::setfill(' ') << std::setw(10) << std::fixed << std::setprecision(5)
-                << std::right << iter.second.elapsed_summary
-                << "s: " << device_kernel_as_string(iter.first) << " ("
-                << iter.second.enqueue_count << " runs)";
-        summary += iter.second.elapsed_summary;
-      }
-      VLOG(1) << "Total measured kernel execution time: " << std::fixed << std::setprecision(5)
-              << summary << "s";
-
-      stats_data.clear();
-      active_kernels.clear();
-    }
-  }
-
-  void kernel_enqueued(DeviceKernel kernel)
-  {
-    assert(active_kernels.find(kernel) == active_kernels.end());
-    active_kernels[kernel] = time_dt();
-  }
-
-  void kernel_finished(DeviceKernel kernel, unsigned int /*kernel_work_size*/)
-  {
-    assert(active_kernels.find(kernel) != active_kernels.end());
-    double elapsed_time = time_dt() - active_kernels[kernel];
-    active_kernels.erase(kernel);
-
-    stats_data[kernel].elapsed_summary += elapsed_time;
-    stats_data[kernel].enqueue_count += 1;
-  }
-
-  std::map<DeviceKernel, KernelExecutionInfo> stats_data;
-  std::map<DeviceKernel, double> active_kernels;
-};
-
-static OneapiKernelStats global_kernel_stats;
-
 /* OneapiDeviceQueue */
 
 OneapiDeviceQueue::OneapiDeviceQueue(OneapiDevice *device)
@@ -88,21 +27,11 @@ OneapiDeviceQueue::OneapiDeviceQueue(OneapiDevice *device)
       oneapi_dll_(device->oneapi_dll_object()),
       kernel_context_(nullptr)
 {
-  if (getenv("CYCLES_ONEAPI_KERNEL_STATS") != nullptr && VLOG_IS_ON(1)) {
-    with_kernel_statistics_ = true;
-  }
-  else {
-    with_kernel_statistics_ = false;
-  }
 }
 
 OneapiDeviceQueue::~OneapiDeviceQueue()
 {
   delete kernel_context_;
-
-  if (with_kernel_statistics_) {
-    global_kernel_stats.print_and_reset();
-  }
 }
 
 int OneapiDeviceQueue::num_concurrent_states(const size_t state_size) const
@@ -162,7 +91,7 @@ void OneapiDeviceQueue::init_execution()
   void *kg_dptr = (void *)oneapi_device_->kernel_globals_device_pointer();
   assert(device_queue);
   assert(kg_dptr);
-  kernel_context_ = new KernelContext{device_queue, kg_dptr, with_kernel_statistics_};
+  kernel_context_ = new KernelContext{device_queue, kg_dptr};
 
   debug_init_execution();
 }
@@ -187,15 +116,9 @@ bool OneapiDeviceQueue::enqueue(DeviceKernel kernel,
 
   assert(kernel_context_);
 
-  if (with_kernel_statistics_)
-    global_kernel_stats.kernel_enqueued(kernel);
-
   /* Call the oneAPI kernel DLL to launch the requested kernel. */
   bool is_finished_ok = oneapi_dll_.oneapi_enqueue_kernel(
       kernel_context_, kernel, uniformed_kernel_work_size, args);
-
-  if (with_kernel_statistics_)
-    global_kernel_stats.kernel_finished(kernel, uniformed_kernel_work_size);
 
   if (is_finished_ok == false) {
     oneapi_device_->set_error("oneAPI kernel \"" + std::string(device_kernel_as_string(kernel)) +

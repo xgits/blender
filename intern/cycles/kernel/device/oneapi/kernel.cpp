@@ -619,9 +619,6 @@ bool oneapi_enqueue_kernel(KernelContext *kernel_context,
       assert(0);
       return false;
     });
-    if (kernel_context->with_per_kernel_statistics) {
-      queue->wait_and_throw();
-    }
   }
   catch (sycl::exception const &e) {
     if (s_error_cb) {

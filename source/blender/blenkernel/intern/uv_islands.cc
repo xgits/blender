@@ -8,14 +8,14 @@ namespace blender::bke::uv_islands {
 /** \name UVIsland
  * \{ */
 
-void UVIsland::extract_border(const MLoop *mloop)
+void UVIsland::extract_border()
 {
   Vector<UVBorderEdge> edges;
-  for (int64_t prim_index = 0; prim_index < primitives.size(); prim_index++) {
-    UVPrimitive &prim = primitives[prim_index];
-    for (UVEdge &edge : prim.edges) {
-      if (edge.is_border_edge()) {
-        edges.append(UVBorderEdge(&edge, prim_index));
+  for (int64_t prim_index = 0; prim_index < uv_primitives.size(); prim_index++) {
+    UVPrimitive &prim = uv_primitives[prim_index];
+    for (UVEdge *edge : prim.edges) {
+      if (edge->is_border_edge()) {
+        edges.append(UVBorderEdge(edge, prim_index));
       }
     }
   }
@@ -37,9 +37,8 @@ void UVIsland::extract_border(const MLoop *mloop)
     starting_border_edge->tag = true;
     float2 first_uv = starting_border_edge->edge->vertices[0].uv;
     float2 current_uv = starting_border_edge->edge->vertices[1].uv;
-    int64_t current_vert = mloop[starting_border_edge->edge->vertices[1].loop].v;
-    border.verts.append(
-        UVBorderVert(first_uv, mloop[starting_border_edge->edge->vertices[0].loop].v));
+    MeshVertex *current_vert = starting_border_edge->edge->vertices[1].vertex;
+    border.verts.append(UVBorderVert(first_uv, starting_border_edge->edge->vertices[0].vertex));
     while (current_uv != first_uv) {
       for (UVBorderEdge &border_edge : edges) {
         if (border_edge.tag == true) {
@@ -50,7 +49,7 @@ void UVIsland::extract_border(const MLoop *mloop)
           if (border_edge.edge->vertices[i].uv == current_uv) {
             border.verts.append(UVBorderVert(current_uv, current_vert));
             current_uv = border_edge.edge->vertices[1 - i].uv;
-            current_vert = mloop[border_edge.edge->vertices[1 - i].loop].v;
+            current_vert = border_edge.edge->vertices[1 - i].vertex;
             border_edge.tag = true;
             break;
           }
@@ -97,121 +96,138 @@ static UVBorderVert *sharpest_border_vert(UVIsland &island)
 }
 
 struct FanTri {
-  int64_t v[3];
+  MeshPrimitive *primitive;
+  /* UVs order are already applied. So uvs[0] mathes primitive->vertices[vert_order[0]]/ */
   float2 uvs[3];
-  /* Index of the primitive in the original mesh. */
-  int64_t prim_index;
+  int vert_order[3];
 
   struct {
     bool found : 1;
     bool should_be_added : 1;
   } flags;
+
+  FanTri(MeshPrimitive *primitive, MeshVertex *vertex) : primitive(primitive)
+  {
+    flags.found = false;
+    flags.should_be_added = false;
+
+    /* Reorder so the first edge starts with the given vertex. */
+    if (primitive->vertices[1].vertex == vertex) {
+      vert_order[0] = 1;
+      vert_order[1] = 2;
+      vert_order[2] = 0;
+    }
+    else if (primitive->vertices[2].vertex == vertex) {
+      vert_order[0] = 2;
+      vert_order[1] = 0;
+      vert_order[2] = 1;
+    }
+    else {
+      BLI_assert(primitive->vertices[0].vertex == vertex);
+      vert_order[0] = 0;
+      vert_order[1] = 1;
+      vert_order[2] = 2;
+    }
+  }
 };
 
 struct Fan {
-  Vector<FanTri> tris;
-};
+  /* Blades of the fan. */
+  Vector<FanTri> segments;
 
-static void print(const Fan &fan, const MVert *mvert)
-{
-  for (const FanTri &tri : fan.tris) {
-    for (int i = 0; i < 3; i++) {
-      float3 co1 = mvert[tri.v[i]].co;
-      printf("%d(%f,%f,%f, %f,%f) ", tri.v[i], co1.x, co1.y, co1.z, tri.uvs[i].x, tri.uvs[i].y);
-    }
-    printf(" %d\n", tri.flags.found);
-  }
-}
-
-static void extend_at_vert(UVIsland &island,
-                           UVBorderVert &vert,
-                           const MLoopTri *looptris,
-                           const int64_t looptri_len,
-                           const MLoop *mloop,
-                           const MVert *mvert)
-{
-  // get the mesh vert.
-  int64_t v = vert.vert;
-  // get the fan of the found mesh vert.
-  Fan fan;
-  for (int64_t tri_index = 0; tri_index < looptri_len; tri_index++) {
-    const MLoopTri &tri = looptris[tri_index];
-    for (int i = 0; i < 3; i++) {
-      if (mloop[tri.tri[i]].v == v) {
-        FanTri fantri;
-        fantri.prim_index = tri_index;
-        fantri.flags.found = false;
-        fantri.v[0] = mloop[tri.tri[0]].v;
-        fantri.v[1] = mloop[tri.tri[1]].v;
-        fantri.v[2] = mloop[tri.tri[2]].v;
-        fan.tris.append(fantri);
-        break;
-      }
-    }
-  }
-  print(fan, mvert);
-
-  // Make sure the first vert points to the center of the fan.
-  for (FanTri &tri : fan.tris) {
-    if (tri.v[1] == v) {
-      tri.v[1] = tri.v[2];
-      tri.v[2] = tri.v[0];
-      tri.v[0] = v;
-    }
-    if (tri.v[2] == v) {
-      tri.v[2] = tri.v[1];
-      tri.v[1] = tri.v[0];
-      tri.v[0] = v;
-    }
-  }
-
-  // reorder fan that the segments connect.
-  print(fan, mvert);
-  for (int i = 0; i < fan.tris.size() - 1; i++) {
-    for (int j = i + 1; j < fan.tris.size(); j++) {
-      if (fan.tris[j].v[1] == fan.tris[i].v[2]) {
-        if (i + 1 != j) {
-          std::swap(fan.tris[j], fan.tris[i + 1]);
+  Fan(MeshVertex &vertex)
+  {
+    MeshEdge *current_edge = vertex.edges[0];
+    MeshPrimitive *stop_primitive = current_edge->primitives[0];
+    MeshPrimitive *previous_primitive = stop_primitive;
+    while (true) {
+      bool stop = false;
+      for (MeshPrimitive *other : current_edge->primitives) {
+        if (stop) {
+          break;
         }
+        if (other == previous_primitive) {
+          continue;
+        }
+
+        for (MeshEdge *edge : other->edges) {
+          if (edge == current_edge || (edge->vert1 != &vertex && edge->vert2 != &vertex)) {
+            continue;
+          }
+          segments.append(FanTri(other, &vertex));
+          current_edge = edge;
+          previous_primitive = other;
+          stop = true;
+          break;
+        }
+      }
+      printf("%lld %lld (%p)\n", stop_primitive->index, previous_primitive->index, current_edge);
+      if (stop_primitive == previous_primitive) {
         break;
       }
     }
   }
-  print(fan, mvert);
-  /* update the known uv coordinates. */
-  for (FanTri &tri : fan.tris) {
-    tri.flags.found = false;
-    tri.flags.should_be_added = false;
-    int2 test_edge(tri.v[0], tri.v[1]);
-    for (UVPrimitive &prim : island.primitives) {
-      for (UVEdge &edge : prim.edges) {
-        int2 o(mloop[edge.vertices[0].loop].v, mloop[edge.vertices[1].loop].v);
-        if ((test_edge.x == o.x && test_edge.y == o.y) ||
-            (test_edge.x == o.y && test_edge.y == o.x)) {
-          tri.uvs[0] = vert.uv;
-          for (int i = 0; i < 2; i++) {
-            if (edge.vertices[i].uv == vert.uv) {
-              tri.uvs[1] = edge.vertices[1 - i].uv;
-              break;
+
+  void init_uv_coordinates(UVBorderVert &vert, const UVIsland &island)
+  {
+    for (FanTri &segment : segments) {
+      int2 test_edge = int2(segment.primitive->vertices[segment.vert_order[0]].vertex->v,
+                            segment.primitive->vertices[segment.vert_order[1]].vertex->v);
+      for (const UVPrimitive &uv_primitive : island.uv_primitives) {
+        for (UVEdge *edge : uv_primitive.edges) {
+          int2 o(edge->vertices[0].vertex->v, edge->vertices[1].vertex->v);
+          if ((test_edge.x == o.x && test_edge.y == o.y) ||
+              (test_edge.x == o.y && test_edge.y == o.x)) {
+            segment.uvs[0] = vert.uv;
+            for (int i = 0; i < 2; i++) {
+              if (edge->vertices[i].uv == vert.uv) {
+                segment.uvs[1] = edge->vertices[1 - i].uv;
+                break;
+              }
             }
           }
         }
       }
     }
-  }
-  fan.tris[fan.tris.size() - 1].uvs[2] = fan.tris[0].uvs[1];
-  for (int i = 0; i < fan.tris.size() - 1; i++) {
-    fan.tris[i].uvs[2] = fan.tris[i + 1].uvs[1];
-  }
 
+    segments.last().uvs[2] = segments.first().uvs[1];
+    for (int i = 0; i < segments.size() - 1; i++) {
+      segments[i].uvs[2] = segments[i + 1].uvs[1];
+    }
+  }
+};
+
+static void print(const Fan &fan)
+{
+  for (const FanTri &segment : fan.segments) {
+    for (int i = 0; i < 3; i++) {
+      int vert_index = segment.vert_order[i];
+      printf("%lld(%f,%f) ",
+             segment.primitive->vertices[vert_index].vertex->v,
+             segment.uvs[i].x,
+             segment.uvs[i].y);
+    }
+    printf(" %d\n", segment.flags.found);
+  }
+}
+
+static void extend_at_vert(UVIsland &island, UVBorderVert &vert, const MeshData &mesh_data)
+{
+  Fan fan(*vert.vertex);
+  print(fan);
+  fan.init_uv_coordinates(vert, island);
+  print(fan);
+
+#if 0
   // add all verts that arent connected to the given border vert to the UVIsland.
   for (FanTri &tri : fan.tris) {
     tri.flags.found = false;
     int2 test_edge(tri.v[0], tri.v[1]);
-    for (UVPrimitive &prim : island.primitives) {
+    for (UVPrimitive &prim : island.uv_primitives) {
       for (UVEdge &edge : prim.edges) {
         if (edge.vertices[0].uv == vert.uv || edge.vertices[1].uv == vert.uv) {
-          int2 o(mloop[edge.vertices[0].loop].v, mloop[edge.vertices[1].loop].v);
+          int2 o(mesh_data.mloop[edge.vertices[0].loop].v,
+                 mesh_data.mloop[edge.vertices[1].loop].v);
           if ((test_edge.x == o.x && test_edge.y == o.y) ||
               (test_edge.x == o.y && test_edge.y == o.x)) {
             tri.flags.found = true;
@@ -220,7 +236,7 @@ static void extend_at_vert(UVIsland &island,
       }
     }
   }
-  print(fan, mvert);
+  print(fan);
   // tag them as being 'not fixed in uv space'. count them and determine a position in uv space.
   // add UV primitives for them.
   // recalc the border.
@@ -269,12 +285,13 @@ static void extend_at_vert(UVIsland &island,
       i++;
       prev_tri = &tri;
     }
-    print(fan, mvert);
+    print(fan);
 
     for (FanTri &tri : fan.tris) {
       if (!tri.flags.should_be_added) {
         continue;
       }
+      /*
       UVPrimitive prim(tri.prim_index);
       prim.edges[0].vertices[0].uv = tri.uvs[0];
       prim.edges[0].vertices[1].uv = tri.uvs[1];
@@ -286,11 +303,13 @@ static void extend_at_vert(UVIsland &island,
       // prim.edges[0].adjacent_uv_primitive = prev_tri.uv_prim_index;
       // prim.edges[1].adjacent_uv_primitive = next_tri.uv_prim_index;
       island.primitives.append(prim);
+      */
     }
   }
   else {
     // TODO duplicate tris or fill tri.
     // Currently we only do the duplication.
+    /*
     UVBorder &border = island.borders[vert.border_index];
 
     float2 center_uv = (border.verts[vert.next_index].uv + border.verts[vert.prev_index].uv) /
@@ -302,7 +321,7 @@ static void extend_at_vert(UVIsland &island,
     prim1.edges[1].vertices[1].uv = center_uv;
     prim1.edges[2].vertices[0].uv = center_uv;
     prim1.edges[2].vertices[1].uv = border.verts[vert.index].uv;
-    island.primitives.append(prim1);
+    island.uv_primitives.append(prim1);
 
     UVPrimitive prim2(0);
     prim2.edges[0].vertices[0].uv = border.verts[vert.index].uv;
@@ -311,21 +330,20 @@ static void extend_at_vert(UVIsland &island,
     prim2.edges[1].vertices[1].uv = border.verts[vert.next_index].uv;
     prim2.edges[2].vertices[0].uv = border.verts[vert.next_index].uv;
     prim2.edges[2].vertices[1].uv = border.verts[vert.index].uv;
-    island.primitives.append(prim2);
+    island.uv_primitives.append(prim2);
 
     vert.uv = center_uv;
+    */
   }
 
   // count fan-sections between border edges.
   // 0 : split in half.
+#endif
 }
 
 void UVIsland::extend_border(const UVIslandsMask &mask,
                              const short island_index,
-                             const MLoopTri *looptris,
-                             const int64_t looptri_len,
-                             const MLoop *mloop,
-                             const MVert *mvert)
+                             const MeshData &mesh_data)
 {
   // Find sharpest corner that still inside the island mask and can be extended.
   // exit when no corner could be found.
@@ -356,7 +374,7 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
     }
 
     // TODO: extend
-    extend_at_vert(*this, *extension_vert, looptris, looptri_len, mloop, mvert);
+    extend_at_vert(*this, *extension_vert, mesh_data);
 
     /* Mark that the vert is extended. Unable to extend twice. */
     extension_vert->flags.extendable = false;
@@ -552,17 +570,17 @@ void svg(std::ostream &ss, const UVIsland &island, int step)
 
   /* Inner edges */
   ss << "    <g stroke=\"grey\" stroke-width=\"1\">\n";
-  for (const UVPrimitive &primitive : island.primitives) {
+  for (const UVPrimitive &primitive : island.uv_primitives) {
     svg(ss, primitive);
   }
   ss << "     </g>\n";
 
   /* Border */
   ss << "    <g stroke=\"black\" stroke-width=\"2\">\n";
-  for (const UVPrimitive &primitive : island.primitives) {
+  for (const UVPrimitive &primitive : island.uv_primitives) {
     for (int i = 0; i < 3; i++) {
-      const UVEdge &edge = primitive.edges[i];
-      if (edge.adjacent_uv_primitive != -1) {
+      const UVEdge &edge = *primitive.edges[i];
+      if (!edge.is_border_edge()) {
         continue;
       }
       svg(ss, edge);
@@ -584,10 +602,10 @@ void svg(std::ostream &ss, const UVIslands &islands, int step)
 
     /* Inner edges */
     ss << "    <g stroke=\"grey\" stroke-dasharray=\"5 5\">\n";
-    for (const UVPrimitive &primitive : island.primitives) {
+    for (const UVPrimitive &primitive : island.uv_primitives) {
       for (int i = 0; i < 3; i++) {
-        const UVEdge &edge = primitive.edges[i];
-        if (edge.adjacent_uv_primitive == -1) {
+        const UVEdge &edge = *primitive.edges[i];
+        if (edge.is_border_edge()) {
           continue;
         }
         svg(ss, edge);
@@ -597,10 +615,10 @@ void svg(std::ostream &ss, const UVIslands &islands, int step)
 
     /* Border */
     ss << "    <g stroke=\"black\" stroke-width=\"2\">\n";
-    for (const UVPrimitive &primitive : island.primitives) {
+    for (const UVPrimitive &primitive : island.uv_primitives) {
       for (int i = 0; i < 3; i++) {
-        const UVEdge &edge = primitive.edges[i];
-        if (edge.adjacent_uv_primitive != -1) {
+        const UVEdge &edge = *primitive.edges[i];
+        if (!edge.is_border_edge()) {
           continue;
         }
         svg(ss, edge);
@@ -667,7 +685,7 @@ void svg(std::ostream &ss, const UVPrimitive &primitive)
 {
   ss << "       <polygon points=\"";
   for (int i = 0; i < 3; i++) {
-    svg_coords(ss, primitive.edges[i].vertices[0].uv);
+    svg_coords(ss, primitive.edges[i]->vertices[0].uv);
     ss << " ";
   }
   ss << "\"/>\n";
@@ -675,19 +693,19 @@ void svg(std::ostream &ss, const UVPrimitive &primitive)
   float2 center(0.0, 0.0);
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 2; j++) {
-      center += primitive.edges[i].vertices[j].uv;
+      center += primitive.edges[i]->vertices[j].uv;
     }
   }
   center /= 3 * 2;
   ss << "<text x=\"" << center.x * 1024 << "\"";
   ss << " y=\"" << center.y * 1024 << "\">";
-  ss << primitive.index;
+  ss << primitive.primitive->index;
   ss << "</text>\n";
   for (int i = 0; i < 3; i++) {
-    float2 co = (center + primitive.edges[i].vertices[0].uv) / 2.0;
+    float2 co = (center + primitive.edges[i]->vertices[0].uv) / 2.0;
     ss << "<text x=\"" << co.x * 1024 << "\"";
     ss << " y=\"" << co.y * 1024 << "\">";
-    ss << primitive.edges[i].vertices[0].v;
+    ss << primitive.edges[i]->vertices[0].vertex->v;
     ss << "</text>\n";
   }
 }

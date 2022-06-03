@@ -6,6 +6,7 @@
 #include <fstream>
 
 #include "BLI_array.hh"
+#include "BLI_edgehash.h"
 #include "BLI_math.h"
 #include "BLI_math_vec_types.hh"
 #include "BLI_vector.hh"
@@ -25,19 +26,165 @@ namespace blender::bke::uv_islands {
 
 struct UVIslands;
 struct UVIslandsMask;
+struct MeshEdge;
+struct MeshPrimitive;
+struct UVPrimitive;
+struct UVPrimitiveEdge;
 struct UVBorder;
+
+struct MeshEdge;
+struct MeshPrimitive;
+
+struct MeshVertex {
+  int64_t v;
+  Vector<MeshEdge *> edges;
+};
+
+struct MeshUVVert {
+  MeshVertex *vertex;
+  float2 uv;
+  int64_t loop;
+};
+
+struct MeshEdge {
+  MeshVertex *vert1;
+  MeshVertex *vert2;
+  Vector<MeshPrimitive *> primitives;
+};
+
+/** Represents a triangle in 3d space (MLoopTri) */
+struct MeshPrimitive {
+  int64_t index;
+  int64_t poly;
+  Vector<MeshEdge *> edges;
+  Vector<MeshUVVert> vertices;
+
+  const MeshUVVert &get_uv_vert(const MeshVertex *vert)
+  {
+    for (const MeshUVVert &uv_vert : vertices) {
+      if (uv_vert.vertex == vert) {
+        return uv_vert;
+      }
+    }
+    BLI_assert_unreachable();
+    return vertices[0];
+  }
+};
+
+/** Wrapper to contain all required mesh data. */
+struct MeshData {
+ public:
+  const MLoopTri *looptri;
+  const int64_t looptri_len;
+  const int64_t vert_len;
+  const MLoop *mloop;
+  const MLoopUV *mloopuv;
+
+ public:
+  Vector<MeshPrimitive> primitives;
+  Vector<MeshEdge> edges;
+  Vector<MeshVertex> vertices;
+
+  explicit MeshData(const MLoopTri *looptri,
+                    const int64_t looptri_len,
+                    const int64_t vert_len,
+                    const MLoop *mloop,
+                    const MLoopUV *mloopuv)
+      : looptri(looptri),
+        looptri_len(looptri_len),
+        vert_len(vert_len),
+        mloop(mloop),
+        mloopuv(mloopuv)
+  {
+    init_vertices();
+    init_primitives();
+    init_edges();
+  }
+  void init_vertices()
+  {
+    vertices.reserve(vert_len);
+    for (int64_t i = 0; i < vert_len; i++) {
+      MeshVertex vert;
+      vert.v = i;
+      vertices.append(vert);
+    }
+  }
+  void init_primitives()
+  {
+    primitives.reserve(looptri_len);
+    for (int64_t i = 0; i < looptri_len; i++) {
+      const MLoopTri &tri = looptri[i];
+      MeshPrimitive primitive;
+      primitive.index = i;
+      primitive.poly = tri.poly;
+
+      for (int j = 0; j < 3; j++) {
+        MeshUVVert uv_vert;
+        uv_vert.loop = tri.tri[j];
+        uv_vert.vertex = &vertices[mloop[uv_vert.loop].v];
+        uv_vert.uv = mloopuv[uv_vert.loop].uv;
+        primitive.vertices.append(uv_vert);
+      }
+      primitives.append(primitive);
+    }
+  }
+
+  void init_edges()
+  {
+    /* TODO: use actual sized. */
+    edges.reserve(looptri_len * 2);
+    EdgeHash *eh = BLI_edgehash_new_ex(__func__, looptri_len * 2);
+    for (int64_t i = 0; i < looptri_len; i++) {
+      const MLoopTri &tri = looptri[i];
+      MeshPrimitive &primitive = primitives[i];
+      for (int j = 0; j < 3; j++) {
+        int v1 = mloop[tri.tri[j]].v;
+        int v2 = mloop[tri.tri[(j + 1) % 3]].v;
+        void *v = BLI_edgehash_lookup(eh, v1, v2);
+        int64_t edge_index;
+        if (v == nullptr) {
+          edge_index = edges.size();
+          BLI_edgehash_insert(eh, v1, v2, POINTER_FROM_INT(edge_index));
+          MeshEdge edge;
+          edge.vert1 = &vertices[v1];
+          edge.vert2 = &vertices[v2];
+          edges.append(edge);
+          MeshEdge *edge_ptr = &edges.last();
+          vertices[v1].edges.append(edge_ptr);
+          vertices[v2].edges.append(edge_ptr);
+        }
+        else {
+          edge_index = POINTER_AS_INT(v);
+        }
+
+        MeshEdge *edge = &edges[edge_index];
+        edge->primitives.append(&primitive);
+        primitive.edges.append(edge);
+      }
+    }
+    BLI_edgehash_free(eh, nullptr);
+  }
+};
 
 struct UVVertex {
   /* Loop index of the loop vertex in the original mesh. */
   uint64_t loop;
-  uint64_t v;
+  MeshVertex *vertex;
   /* Position in uv space. */
   float2 uv;
+
+  explicit UVVertex()
+  {
+  }
+
+  explicit UVVertex(const MeshUVVert &vert) : loop(vert.loop), vertex(vert.vertex), uv(vert.uv)
+  {
+  }
 };
 
 struct UVEdge {
   UVVertex vertices[2];
-  int64_t adjacent_uv_primitive = -1;
+  Vector<UVPrimitive *, 2> uv_primitives;
 
   bool has_shared_edge(const UVEdge &other) const
   {
@@ -45,9 +192,15 @@ struct UVEdge {
            (vertices[0].uv == other.vertices[1].uv && vertices[1].uv == other.vertices[0].uv);
   }
 
+  bool has_shared_edge(const MeshUVVert &v1, const MeshUVVert &v2) const
+  {
+    return (vertices[0].uv == v1.uv && vertices[1].uv == v2.uv) ||
+           (vertices[0].uv == v2.uv && vertices[1].uv == v1.uv);
+  }
+
   bool is_border_edge() const
   {
-    return adjacent_uv_primitive == -1;
+    return uv_primitives.size() == 1;
   }
 };
 
@@ -55,36 +208,20 @@ struct UVPrimitive {
   /**
    * Index of the primitive in the original mesh.
    */
-  uint64_t index;
-  UVEdge edges[3];
+  MeshPrimitive *primitive;
+  Vector<UVEdge *, 3> edges;
 
-  explicit UVPrimitive(uint64_t prim_index) : index(prim_index)
+  explicit UVPrimitive(MeshPrimitive *primitive) : primitive(primitive)
   {
   }
 
-  explicit UVPrimitive(uint64_t prim_index,
-                       const MLoopTri &tri,
-                       const MLoop *mloop,
-                       const MLoopUV *mloopuv)
-      : index(prim_index)
+  Vector<std::pair<UVEdge *, UVEdge *>> shared_edges(UVPrimitive &other)
   {
-    for (int i = 0; i < 3; i++) {
-      edges[i].vertices[0].uv = mloopuv[tri.tri[i]].uv;
-      edges[i].vertices[1].uv = mloopuv[tri.tri[(i + 1) % 3]].uv;
-      edges[i].vertices[0].loop = tri.tri[i];
-      edges[i].vertices[1].loop = tri.tri[(i + 1) % 3];
-      edges[i].vertices[0].v = mloop[tri.tri[i]].v;
-      edges[i].vertices[1].v = mloop[tri.tri[(i + 1) % 3]].v;
-    }
-  }
-
-  Vector<std::pair<UVEdge &, UVEdge &>> shared_edges(UVPrimitive &other)
-  {
-    Vector<std::pair<UVEdge &, UVEdge &>> result;
+    Vector<std::pair<UVEdge *, UVEdge *>> result;
     for (int i = 0; i < 3; i++) {
       for (int j = 0; j < 3; j++) {
-        if (edges[i].has_shared_edge(other.edges[j])) {
-          result.append(std::pair<UVEdge &, UVEdge &>(edges[i], other.edges[j]));
+        if (edges[i]->has_shared_edge(*other.edges[j])) {
+          result.append(std::pair<UVEdge *, UVEdge *>(edges[i], other.edges[j]));
         }
       }
     }
@@ -95,9 +232,24 @@ struct UVPrimitive {
   {
     for (int i = 0; i < 3; i++) {
       for (int j = 0; j < 3; j++) {
-        if (edges[i].has_shared_edge(other.edges[j])) {
+        if (edges[i]->has_shared_edge(*other.edges[j])) {
           return true;
         }
+      }
+    }
+    return false;
+  }
+
+  bool has_shared_edge(const MeshPrimitive &primitive) const
+  {
+    for (const UVEdge *uv_edge : edges) {
+      const MeshUVVert *v1 = &primitive.vertices.last();
+      for (int i = 0; i < primitive.vertices.size(); i++) {
+        const MeshUVVert *v2 = &primitive.vertices[i];
+        if (uv_edge->has_shared_edge(*v1, *v2)) {
+          return true;
+        }
+        v1 = v2;
       }
     }
     return false;
@@ -108,7 +260,7 @@ struct UVBorderVert {
   float2 uv;
 
   /* Index of this vert in the vertices of the original mesh. */
-  int64_t vert;
+  MeshVertex *vertex;
 
   /* Indexes of connected border verts. */
   int64_t index;
@@ -124,7 +276,7 @@ struct UVBorderVert {
     bool extendable : 1;
   } flags;
 
-  explicit UVBorderVert(float2 &uv, int64_t vert) : uv(uv), vert(vert)
+  explicit UVBorderVert(float2 &uv, MeshVertex *vertex) : uv(uv), vertex(vertex)
   {
     flags.extendable = true;
   }
@@ -160,38 +312,85 @@ struct UVBorder {
 };
 
 struct UVIsland {
-  Vector<UVPrimitive> primitives;
+  Vector<UVVertex> uv_vertices;
+  Vector<UVEdge> uv_edges;
+  Vector<UVPrimitive> uv_primitives;
   /**
    * List of borders of this island. There can be multiple borders per island as a border could be
    * completely encapsulated by another one.
    */
   Vector<UVBorder> borders;
 
-  UVIsland(const UVPrimitive &primitive)
+  UVIsland()
   {
-    append(primitive);
+    uv_vertices.reserve(100000);
+    uv_edges.reserve(100000);
+    uv_primitives.reserve(100000);
+  }
+
+  UVPrimitive *add_primitive(MeshPrimitive &primitive)
+  {
+    UVPrimitive uv_primitive(&primitive);
+    uv_primitives.append(uv_primitive);
+    UVPrimitive *uv_primitive_ptr = &uv_primitives.last();
+    for (MeshEdge *edge : primitive.edges) {
+      const MeshUVVert &v1 = primitive.get_uv_vert(edge->vert1);
+      const MeshUVVert &v2 = primitive.get_uv_vert(edge->vert2);
+      UVEdge uv_edge_template;
+      uv_edge_template.vertices[0] = UVVertex(v1);
+      uv_edge_template.vertices[1] = UVVertex(v2);
+      UVEdge *uv_edge = lookup_or_create(uv_edge_template);
+      uv_primitive_ptr->edges.append(uv_edge);
+      uv_edge->uv_primitives.append(uv_primitive_ptr);
+    }
+    return uv_primitive_ptr;
+  }
+
+  UVEdge *lookup_or_create(const UVEdge &edge)
+  {
+    for (UVEdge &uv_edge : uv_edges) {
+      if (uv_edge.has_shared_edge(edge)) {
+        return &uv_edge;
+      }
+    }
+
+    uv_edges.append(edge);
+    UVEdge *result = &uv_edges.last();
+    result->uv_primitives.clear();
+    return result;
   }
 
   /** Initialize the border attribute. */
-  void extract_border(const MLoop *mloop);
+  void extract_border();
   /** Iterative extend border to fit the mask. */
   void extend_border(const UVIslandsMask &mask,
                      const short island_index,
-                     const MLoopTri *looptris,
-                     const int64_t looptri_len,
-                     const MLoop *mloop,
-                     const MVert *mvert);
+                     const MeshData &mesh_data);
 
  private:
   void append(const UVPrimitive &primitive)
   {
-    primitives.append(primitive);
+    uv_primitives.append(primitive);
+    UVPrimitive *new_prim_ptr = &uv_primitives.last();
+    for (int i = 0; i < 3; i++) {
+      new_prim_ptr->edges[i] = lookup_or_create(*new_prim_ptr->edges[i]);
+      new_prim_ptr->edges[i]->uv_primitives.append(new_prim_ptr);
+    }
   }
 
  public:
   bool has_shared_edge(const UVPrimitive &primitive) const
   {
-    for (const UVPrimitive &prim : primitives) {
+    for (const UVPrimitive &prim : uv_primitives) {
+      if (prim.has_shared_edge(primitive)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  bool has_shared_edge(const MeshPrimitive &primitive) const
+  {
+    for (const UVPrimitive &prim : uv_primitives) {
       if (prim.has_shared_edge(primitive)) {
         return true;
       }
@@ -201,26 +400,11 @@ struct UVIsland {
 
   const void extend_border(const UVPrimitive &primitive)
   {
-    UVPrimitive new_prim = primitive;
-    uint64_t shared_edges_len = 0;
-    for (UVPrimitive &prim : primitives) {
-      for (std::pair<UVEdge &, UVEdge &> &shared_edge : prim.shared_edges(new_prim)) {
-        // TODO: eventually this should be supported. Skipped for now as it isn't the most
-        // important this to add. */
-        BLI_assert(shared_edge.first.adjacent_uv_primitive == -1);
-        BLI_assert(shared_edge.second.adjacent_uv_primitive == -1);
-        shared_edge.first.adjacent_uv_primitive = new_prim.index;
-        shared_edge.second.adjacent_uv_primitive = prim.index;
-        shared_edges_len++;
+    for (UVPrimitive &prim : uv_primitives) {
+      if (prim.has_shared_edge(primitive)) {
+        append(primitive);
       }
     }
-    BLI_assert_msg(shared_edges_len != 0,
-                   "Cannot extend as primitive has no shared edges with UV island.");
-    BLI_assert_msg(shared_edges_len < 4,
-                   "Cannot extend as primitive has to many shared edges with UV island. "
-                   "Inconsistent UVIsland?");
-
-    append(new_prim);
   }
 
   /**
@@ -230,24 +414,10 @@ struct UVIsland {
    * NOTE: this cannot be used to join two islands that have multiple shared primitives, or
    * connecting via multiple primitives.
    * */
-  void join(const UVIsland &other, const UVPrimitive &primitive)
+  void join(const UVIsland &other)
   {
-    Vector<const UVPrimitive *> prims_to_extend;
-    Vector<const UVPrimitive *> prims_to_append;
-    for (const UVPrimitive &other_prim : other.primitives) {
-      if (primitive.has_shared_edge(other_prim)) {
-        prims_to_extend.append(&other_prim);
-      }
-      else {
-        prims_to_append.append(&other_prim);
-      }
-    }
-
-    for (const UVPrimitive *other_prim : prims_to_extend) {
-      extend_border(*other_prim);
-    }
-    for (const UVPrimitive *other_prim : prims_to_append) {
-      append(*other_prim);
+    for (const UVPrimitive &other_prim : other.uv_primitives) {
+      append(other_prim);
     }
   }
 };
@@ -265,42 +435,40 @@ void svg_footer(std::ostream &ss);
 struct UVIslands {
   Vector<UVIsland> islands;
 
-  explicit UVIslands(const MLoopTri *primitives,
-                     uint64_t primitives_len,
-                     const MLoop *mloop,
-                     const MLoopUV *mloopuv)
+  explicit UVIslands(MeshData &mesh_data)
   {
-    for (int prim = 0; prim < primitives_len; prim++) {
-      UVPrimitive primitive(prim, primitives[prim], mloop, mloopuv);
-      add(primitive);
-    }
+    islands.reserve(1000);
 
 #ifdef DEBUG_SVG
     std::ofstream of;
     of.open("/tmp/islands.svg");
     svg_header(of);
-    svg(of, *this, 0);
+    int step = 0;
+    for (MeshPrimitive &primitive : mesh_data.primitives) {
+      add(primitive);
+      svg(of, *this, step++);
+    }
     svg_footer(of);
     of.close();
+#else
+    for (MeshPrimitive &primitive : mesh_data.primitives) {
+      add(primitive);
+    }
 #endif
   }
 
-  void extract_borders(const MLoop *mloop)
+  void extract_borders()
   {
     for (UVIsland &island : islands) {
-      island.extract_border(mloop);
+      island.extract_border();
     }
   }
 
-  void extend_borders(const UVIslandsMask &islands_mask,
-                      const MLoopTri *looptris,
-                      const int64_t looptri_len,
-                      const MLoop *mloop,
-                      const MVert *mvert)
+  void extend_borders(const UVIslandsMask &islands_mask, const MeshData &mesh_data)
   {
     ushort index = 0;
     for (UVIsland &island : islands) {
-      island.extend_border(islands_mask, index++, looptris, looptri_len, mloop, mvert);
+      island.extend_border(islands_mask, index++, mesh_data);
     }
 
 #ifdef DEBUG_SVG
@@ -318,7 +486,7 @@ struct UVIslands {
   }
 
  private:
-  void add(const UVPrimitive &primitive)
+  void add(MeshPrimitive &primitive)
   {
     Vector<uint64_t> extended_islands;
     for (uint64_t index = 0; index < islands.size(); index++) {
@@ -330,11 +498,12 @@ struct UVIslands {
 
     if (extended_islands.size() > 0) {
       UVIsland &island = islands[extended_islands[0]];
-      island.extend_border(primitive);
+      island.add_primitive(primitive);
+
       /* `extended_islands` can hold upto 3 islands that are connected with the given tri.
        * they can be joined to a single island, using the first as its target. */
       for (uint64_t index = 1; index < extended_islands.size(); index++) {
-        island.join(islands[extended_islands[index]], primitive);
+        island.join(islands[extended_islands[index]]);
       }
 
       /* remove the islands that have been joined, starting at the end. */
@@ -346,8 +515,14 @@ struct UVIslands {
     }
 
     /* if the tri has not been added we can create a new island. */
-    UVIsland island(primitive);
-    islands.append(island);
+    UVIsland *island = create_island();
+    island->add_primitive(primitive);
+  }
+
+  UVIsland *create_island()
+  {
+    islands.append(UVIsland());
+    return &islands.last();
   }
 
   bool validate() const
@@ -356,7 +531,7 @@ struct UVIslands {
      * already be merged. */
     for (int i = 0; i < islands.size() - 1; i++) {
       for (int j = i + 1; j < islands.size(); j++) {
-        for (const UVPrimitive &prim : islands[j].primitives) {
+        for (const UVPrimitive &prim : islands[j].uv_primitives) {
           if (islands[i].has_shared_edge(prim)) {
             return false;
           }
@@ -401,15 +576,8 @@ struct UVIslandsMask {
 
   void add(short island_index, const UVIsland &island)
   {
-    for (const UVPrimitive &prim : island.primitives) {
-      add(island_index, prim);
-    }
-  }
-
-  void add(short island_index, const UVPrimitive &primitive)
-  {
-    for (int i = 0; i < 3; i++) {
-      add(island_index, primitive.edges[i]);
+    for (const UVEdge &edge : island.uv_edges) {
+      add(island_index, edge);
     }
   }
 

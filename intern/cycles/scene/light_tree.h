@@ -78,6 +78,11 @@ struct LightTreePrimitive {
     int object_id;
     int lamp_id;
   };
+
+  /* to-do: implement these using the index into the scene. */
+  BoundBox calculate_bbox(Scene *scene) const;
+  OrientationBounds calculate_bcone(Scene *scene) const;
+  float calculate_energy(Scene *scene) const;
 };
 
 /* Light Tree Bucket Info
@@ -111,7 +116,13 @@ struct LightTreeBuildNode {
  * Compact representation of light tree node
  * that's actually used in the device */
 struct PackedLightTreeNode {
-
+  BoundBox bbox;
+  OrientationBounds bcone;
+  union {
+    int first_prim_index;   /* leaf nodes contain an index to first primitive. */
+    int second_child_index; /* interior nodes contain an index to second child. */
+  };
+  int num_lights;
 };
 
 /* Light BVH
@@ -120,6 +131,7 @@ struct PackedLightTreeNode {
  * and considers additional orientation and energy information */
 class LightTree {
   vector<LightTreePrimitive> prims_;
+  vector<PackedLightTreeNode> nodes_;
   Scene *scene_;
   uint max_lights_in_leaf_;
 
@@ -134,8 +146,7 @@ private:
   LightTreeBuildNode* recursive_build(vector<LightTreePrimitiveInfo> &primitive_info, int start, int end, int &total_nodes, vector<LightTreePrimitive> &ordered_prims);
   void split_saoh(const BoundBox &centroid_bounds,
                   const vector<LightTreePrimitiveInfo> &primitive_info, int start, int end, const BoundBox &bbox, const OrientationBounds &bcone);
-  float calculate_split_cost();
-  int flatten_tree();
+  int flatten_tree(const LightTreeBuildNode *node, int &offset);
 
   
 };

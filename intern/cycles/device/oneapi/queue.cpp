@@ -234,7 +234,7 @@ void OneapiDeviceQueue::copy_to_device(device_memory &mem)
 
 void OneapiDeviceQueue::copy_from_device(device_memory &mem)
 {
-  oneapi_device_->mem_copy_from(mem, 0, 1, 1, mem.memory_size());
+  oneapi_device_->mem_copy_from(mem);
 }
 
 CCL_NAMESPACE_END

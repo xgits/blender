@@ -57,6 +57,7 @@
 
 using blender::IndexRange;
 using blender::Span;
+using blender::StringRef;
 using blender::Vector;
 
 /* number of layers to add when growing a CustomData object */
@@ -2324,6 +2325,43 @@ bool CustomData_merge(const CustomData *source,
   return changed;
 }
 
+static bool layer_stored_in_bmesh(const StringRef name)
+{
+  return ELEM(name, ".hide_face", ".hide_edge", ".hide_face");
+}
+
+static CustomData shallow_copy_remove_non_bmesh_attributes(const CustomData &src)
+{
+  Vector<CustomDataLayer> dst_layers;
+  for (const CustomDataLayer &layer : Span<CustomDataLayer>{src.layers, src.totlayer}) {
+    if (layer_stored_in_bmesh(layer.name)) {
+      dst_layers.append(layer);
+    }
+  }
+
+  CustomData dst = src;
+  dst.layers = static_cast<CustomDataLayer *>(
+      MEM_calloc_arrayN(dst_layers.size(), sizeof(CustomDataLayer), __func__));
+  dst.totlayer = dst_layers.size();
+  memcpy(dst.layers, dst_layers.data(), dst_layers.as_span().size_in_bytes());
+
+  CustomData_update_typemap(&dst);
+
+  return dst;
+}
+
+bool CustomData_merge_mesh_to_bmesh(const CustomData *source,
+                                    CustomData *dest,
+                                    eCustomDataMask mask,
+                                    eCDAllocType alloctype,
+                                    int totelem)
+{
+  CustomData source_copy = shallow_copy_remove_non_bmesh_attributes(*source);
+  const bool result = CustomData_merge(&source_copy, dest, mask, alloctype, totelem);
+  MEM_SAFE_FREE(source_copy.layers);
+  return result;
+}
+
 void CustomData_realloc(CustomData *data, int totelem)
 {
   for (int i = 0; i < data->totlayer; i++) {
@@ -2352,6 +2390,17 @@ void CustomData_copy(const CustomData *source,
   }
 
   CustomData_merge(source, dest, mask, alloctype, totelem);
+}
+
+void CustomData_copy_mesh_to_bmesh(const CustomData *source,
+                                   CustomData *dest,
+                                   eCustomDataMask mask,
+                                   eCDAllocType alloctype,
+                                   int totelem)
+{
+  CustomData source_copy = shallow_copy_remove_non_bmesh_attributes(*source);
+  CustomData_copy(&source_copy, dest, mask, alloctype, totelem);
+  MEM_SAFE_FREE(source_copy.layers);
 }
 
 static void customData_free_layer__internal(CustomDataLayer *layer, int totelem)

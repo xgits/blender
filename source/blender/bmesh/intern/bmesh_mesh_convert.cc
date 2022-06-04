@@ -213,10 +213,10 @@ void BM_mesh_bm_from_me(BMesh *bm, const Mesh *me, const struct BMeshFromMeshPar
 
   if (!me || !me->totvert) {
     if (me && is_new) { /* No verts? still copy custom-data layout. */
-      CustomData_copy(&me->vdata, &bm->vdata, mask.vmask, CD_DEFAULT, 0);
-      CustomData_copy(&me->edata, &bm->edata, mask.emask, CD_DEFAULT, 0);
-      CustomData_copy(&me->ldata, &bm->ldata, mask.lmask, CD_DEFAULT, 0);
-      CustomData_copy(&me->pdata, &bm->pdata, mask.pmask, CD_DEFAULT, 0);
+      CustomData_copy_mesh_to_bmesh(&me->vdata, &bm->vdata, mask.vmask, CD_DEFAULT, 0);
+      CustomData_copy_mesh_to_bmesh(&me->edata, &bm->edata, mask.emask, CD_DEFAULT, 0);
+      CustomData_copy_mesh_to_bmesh(&me->ldata, &bm->ldata, mask.lmask, CD_DEFAULT, 0);
+      CustomData_copy_mesh_to_bmesh(&me->pdata, &bm->pdata, mask.pmask, CD_DEFAULT, 0);
 
       CustomData_bmesh_init_pool(&bm->vdata, me->totvert, BM_VERT);
       CustomData_bmesh_init_pool(&bm->edata, me->totedge, BM_EDGE);
@@ -232,10 +232,10 @@ void BM_mesh_bm_from_me(BMesh *bm, const Mesh *me, const struct BMeshFromMeshPar
   }
 
   if (is_new) {
-    CustomData_copy(&me->vdata, &bm->vdata, mask.vmask, CD_CALLOC, 0);
-    CustomData_copy(&me->edata, &bm->edata, mask.emask, CD_CALLOC, 0);
-    CustomData_copy(&me->ldata, &bm->ldata, mask.lmask, CD_CALLOC, 0);
-    CustomData_copy(&me->pdata, &bm->pdata, mask.pmask, CD_CALLOC, 0);
+    CustomData_copy_mesh_to_bmesh(&me->vdata, &bm->vdata, mask.vmask, CD_CALLOC, 0);
+    CustomData_copy_mesh_to_bmesh(&me->edata, &bm->edata, mask.emask, CD_CALLOC, 0);
+    CustomData_copy_mesh_to_bmesh(&me->ldata, &bm->ldata, mask.lmask, CD_CALLOC, 0);
+    CustomData_copy_mesh_to_bmesh(&me->pdata, &bm->pdata, mask.pmask, CD_CALLOC, 0);
   }
   else {
     CustomData_bmesh_merge(&me->vdata, &bm->vdata, mask.vmask, CD_CALLOC, bm, BM_VERT);
@@ -924,6 +924,11 @@ static void ensure_bool_layer(MutableSpan<bool> &values,
                               const char *name,
                               const int num)
 {
+  if (values.is_empty()) {
+    if (void *layer_data = CustomData_get_layer_named(&data, CD_PROP_BOOL, name)) {
+      values = {(bool *)layer_data, num};
+    }
+  }
   if (values.is_empty()) {
     values = {(bool *)CustomData_add_layer_named(&data, CD_PROP_BOOL, CD_CALLOC, NULL, num, name),
               num};

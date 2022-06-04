@@ -181,8 +181,6 @@ static void extract_lines_loose_geom_subdiv(const DRWSubdivCache *subdiv_cache,
 
   uint *flags_data = static_cast<uint *>(GPU_vertbuf_get_data(flags));
 
-  const MEdge *medge = mr->medge;
-
   for (DRWSubdivLooseEdge edge : loose_edges) {
     *flags_data++ = mr->edge_hide && mr->edge_hide[edge.coarse_edge_index];
   }

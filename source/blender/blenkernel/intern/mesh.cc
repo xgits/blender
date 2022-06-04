@@ -230,7 +230,7 @@ static void prepare_legacy_hide_data_for_writing(Mesh &mesh)
 
   MutableSpan<MPoly> polys(mesh.mpoly, mesh.totpoly);
   const VArray<bool> poly_hide = component.attribute_get_for_read<bool>(
-      ".poly_hide", ATTR_DOMAIN_FACE, false);
+      ".hide_face", ATTR_DOMAIN_FACE, false);
   for (const int i : polys.index_range()) {
     SET_FLAG_FROM_TEST(polys[i].flag, poly_hide[i], ME_HIDE);
   }

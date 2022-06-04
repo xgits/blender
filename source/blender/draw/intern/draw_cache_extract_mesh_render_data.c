@@ -541,11 +541,11 @@ MeshRenderData *mesh_render_data_create(Object *object,
     mr->p_origindex = CustomData_get_layer(&mr->me->pdata, CD_ORIGINDEX);
 
     mr->vert_hide = (const bool *)CustomData_get_layer_named(
-        &me->vdata, CD_PROP_BOOL, ".vert_hide");
+        &me->vdata, CD_PROP_BOOL, ".hide_vert");
     mr->edge_hide = (const bool *)CustomData_get_layer_named(
-        &me->edata, CD_PROP_BOOL, ".edge_hide");
+        &me->edata, CD_PROP_BOOL, ".hide_edge");
     mr->face_hide = (const bool *)CustomData_get_layer_named(
-        &me->pdata, CD_PROP_BOOL, ".face_hide");
+        &me->pdata, CD_PROP_BOOL, ".hide_face");
   }
   else {
     /* #BMesh */

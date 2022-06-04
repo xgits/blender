@@ -1013,21 +1013,21 @@ void BKE_mesh_flush_hidden_from_verts(Mesh *me)
   component.replace(me, GeometryOwnershipType::Editable);
 
   const VArray<bool> vert_hide = component.attribute_get_for_read<bool>(
-      ".vert_hide", ATTR_DOMAIN_POINT, false);
+      ".hide_vert", ATTR_DOMAIN_POINT, false);
   if (vert_hide.is_single() && !vert_hide.get_internal_single()) {
-    component.attribute_try_delete(".edge_hide");
-    component.attribute_try_delete(".face_hide");
+    component.attribute_try_delete(".hide_edge");
+    component.attribute_try_delete(".hide_face");
     return;
   }
 
   OutputAttribute_Typed<bool> edge_hide = component.attribute_try_get_for_output_only<bool>(
-      ".edge_hide", ATTR_DOMAIN_EDGE);
+      ".hide_edge", ATTR_DOMAIN_EDGE);
   component.attribute_try_adapt_domain(vert_hide, ATTR_DOMAIN_POINT, ATTR_DOMAIN_EDGE)
       .materialize(edge_hide.as_span());
   edge_hide.save();
 
   OutputAttribute_Typed<bool> face_hide = component.attribute_try_get_for_output_only<bool>(
-      ".face_hide", ATTR_DOMAIN_FACE);
+      ".hide_face", ATTR_DOMAIN_FACE);
   component.attribute_try_adapt_domain(vert_hide, ATTR_DOMAIN_POINT, ATTR_DOMAIN_FACE)
       .materialize(face_hide.as_span());
   face_hide.save();
@@ -1039,21 +1039,21 @@ void BKE_mesh_flush_hidden_from_polys(Mesh *me)
   component.replace(me, GeometryOwnershipType::Editable);
 
   const VArray<bool> face_hide = component.attribute_get_for_read<bool>(
-      ".face_hide", ATTR_DOMAIN_FACE, false);
+      ".hide_face", ATTR_DOMAIN_FACE, false);
   if (face_hide.is_single() && !face_hide.get_internal_single()) {
-    component.attribute_try_delete(".vert_hide");
-    component.attribute_try_delete(".edge_hide");
+    component.attribute_try_delete(".hide_vert");
+    component.attribute_try_delete(".hide_edge");
     return;
   }
 
   OutputAttribute_Typed<bool> edge_hide = component.attribute_try_get_for_output_only<bool>(
-      ".edge_hide", ATTR_DOMAIN_EDGE);
+      ".hide_edge", ATTR_DOMAIN_EDGE);
   component.attribute_try_adapt_domain(face_hide, ATTR_DOMAIN_FACE, ATTR_DOMAIN_EDGE)
       .materialize(edge_hide.as_span());
   edge_hide.save();
 
   OutputAttribute_Typed<bool> vert_hide = component.attribute_try_get_for_output_only<bool>(
-      ".vert_hide", ATTR_DOMAIN_POINT);
+      ".hide_vert", ATTR_DOMAIN_POINT);
   component.attribute_try_adapt_domain(face_hide, ATTR_DOMAIN_FACE, ATTR_DOMAIN_POINT)
       .materialize(vert_hide.as_span());
   vert_hide.save();
@@ -1149,8 +1149,8 @@ void BKE_mesh_flush_select_from_verts(Mesh *me)
   mesh_flush_select_from_verts(
       {me->mvert, me->totvert},
       {me->mloop, me->totloop},
-      component.attribute_get_for_read<bool>(".edge_hide", ATTR_DOMAIN_EDGE, false),
-      component.attribute_get_for_read<bool>(".face_hide", ATTR_DOMAIN_FACE, false),
+      component.attribute_get_for_read<bool>(".hide_edge", ATTR_DOMAIN_EDGE, false),
+      component.attribute_get_for_read<bool>(".hide_face", ATTR_DOMAIN_FACE, false),
       {me->medge, me->totedge},
       {me->mpoly, me->totpoly});
 }

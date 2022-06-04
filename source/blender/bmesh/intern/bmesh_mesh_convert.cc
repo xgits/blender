@@ -354,11 +354,11 @@ void BM_mesh_bm_from_me(BMesh *bm, const Mesh *me, const struct BMeshFromMeshPar
                                            -1;
 
   const bool *vert_hide = (const bool *)CustomData_get_layer_named(
-      &me->vdata, CD_PROP_BOOL, ".vert_hide");
+      &me->vdata, CD_PROP_BOOL, ".hide_vert");
   const bool *edge_hide = (const bool *)CustomData_get_layer_named(
-      &me->edata, CD_PROP_BOOL, ".edge_hide");
+      &me->edata, CD_PROP_BOOL, ".hide_edge");
   const bool *face_hide = (const bool *)CustomData_get_layer_named(
-      &me->pdata, CD_PROP_BOOL, ".face_hide");
+      &me->pdata, CD_PROP_BOOL, ".hide_face");
 
   Span<MVert> mvert{me->mvert, me->totvert};
   Array<BMVert *> vtable(me->totvert);
@@ -1007,7 +1007,7 @@ void BM_mesh_bm_to_me(Main *bmain, BMesh *bm, Mesh *me, const struct BMeshToMesh
 
     mvert->flag = BM_vert_flag_to_mflag(v);
     if (BM_elem_flag_test(v, BM_ELEM_HIDDEN)) {
-      ensure_bool_layer(vert_hide, me->vdata, ".vert_hide", me->totvert);
+      ensure_bool_layer(vert_hide, me->vdata, ".hide_vert", me->totvert);
       vert_hide[i] = true;
     }
 
@@ -1035,7 +1035,7 @@ void BM_mesh_bm_to_me(Main *bmain, BMesh *bm, Mesh *me, const struct BMeshToMesh
 
     med->flag = BM_edge_flag_to_mflag(e);
     if (BM_elem_flag_test(e, BM_ELEM_HIDDEN)) {
-      ensure_bool_layer(edge_hide, me->edata, ".edge_hide", me->totedge);
+      ensure_bool_layer(edge_hide, me->edata, ".hide_edge", me->totedge);
       edge_hide[i] = true;
     }
 
@@ -1068,7 +1068,7 @@ void BM_mesh_bm_to_me(Main *bmain, BMesh *bm, Mesh *me, const struct BMeshToMesh
     mpoly->mat_nr = f->mat_nr;
     mpoly->flag = BM_face_flag_to_mflag(f);
     if (BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
-      ensure_bool_layer(face_hide, me->pdata, ".face_hide", me->totpoly);
+      ensure_bool_layer(face_hide, me->pdata, ".hide_face", me->totpoly);
       face_hide[i] = true;
     }
     l_iter = l_first = BM_FACE_FIRST_LOOP(f);
@@ -1274,7 +1274,7 @@ void BM_mesh_bm_to_me_for_eval(BMesh *bm, Mesh *me, const CustomData_MeshMasks *
 
     mv->flag = BM_vert_flag_to_mflag(eve);
     if (BM_elem_flag_test(eve, BM_ELEM_HIDDEN)) {
-      ensure_bool_layer(vert_hide, me->vdata, ".vert_hide", me->totvert);
+      ensure_bool_layer(vert_hide, me->vdata, ".hide_vert", me->totvert);
       vert_hide[i] = true;
     }
 
@@ -1300,7 +1300,7 @@ void BM_mesh_bm_to_me_for_eval(BMesh *bm, Mesh *me, const CustomData_MeshMasks *
 
     med->flag = BM_edge_flag_to_mflag(eed);
     if (BM_elem_flag_test(eed, BM_ELEM_HIDDEN)) {
-      ensure_bool_layer(edge_hide, me->edata, ".edge_hide", me->totedge);
+      ensure_bool_layer(edge_hide, me->edata, ".hide_edge", me->totedge);
       edge_hide[i] = true;
     }
 
@@ -1334,7 +1334,7 @@ void BM_mesh_bm_to_me_for_eval(BMesh *bm, Mesh *me, const CustomData_MeshMasks *
     mp->totloop = efa->len;
     mp->flag = BM_face_flag_to_mflag(efa);
     if (BM_elem_flag_test(efa, BM_ELEM_HIDDEN)) {
-      ensure_bool_layer(face_hide, me->pdata, ".face_hide", me->totpoly);
+      ensure_bool_layer(face_hide, me->pdata, ".hide_face", me->totpoly);
       face_hide[i] = true;
     }
 

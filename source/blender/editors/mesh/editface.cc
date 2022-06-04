@@ -131,7 +131,7 @@ void paintface_hide(bContext *C, Object *ob, const bool unselected)
   component.replace(me, GeometryOwnershipType::Editable);
 
   OutputAttribute_Typed<bool> face_hide_attribute =
-      component.attribute_try_get_for_output_only<bool>(".face_hide", ATTR_DOMAIN_FACE);
+      component.attribute_try_get_for_output_only<bool>(".hide_face", ATTR_DOMAIN_FACE);
   MutableSpan<bool> face_hide = face_hide_attribute.as_span();
 
   for (int i = 0; i < me->totpoly; i++) {
@@ -166,7 +166,7 @@ void paintface_reveal(bContext *C, Object *ob, const bool select)
 
   if (select) {
     const VArray<bool> face_hide = component.attribute_get_for_read<bool>(
-        ".face_hide", ATTR_DOMAIN_FACE, false);
+        ".hide_face", ATTR_DOMAIN_FACE, false);
     for (int i = 0; i < me->totpoly; i++) {
       MPoly *mpoly = &me->mpoly[i];
       if (face_hide[i]) {
@@ -175,7 +175,7 @@ void paintface_reveal(bContext *C, Object *ob, const bool select)
     }
   }
 
-  component.attribute_try_delete(".face_hide");
+  component.attribute_try_delete(".hide_face");
 
   BKE_mesh_flush_hidden_from_polys(me);
 
@@ -196,7 +196,7 @@ static void select_linked_tfaces_with_seams(Mesh *me, const uint index, const bo
   component.replace(me, GeometryOwnershipType::Editable);
 
   const VArray<bool> face_hide = component.attribute_get_for_read<bool>(
-      ".face_hide", ATTR_DOMAIN_FACE, false);
+      ".hide_face", ATTR_DOMAIN_FACE, false);
 
   if (index != (uint)-1) {
     /* only put face under cursor in array */
@@ -293,7 +293,7 @@ bool paintface_deselect_all_visible(bContext *C, Object *ob, int action, bool fl
   component.replace(me, GeometryOwnershipType::Editable);
 
   const VArray<bool> face_hide = component.attribute_get_for_read<bool>(
-      ".face_hide", ATTR_DOMAIN_FACE, false);
+      ".hide_face", ATTR_DOMAIN_FACE, false);
 
   if (action == SEL_TOGGLE) {
     action = SEL_SELECT;
@@ -358,7 +358,7 @@ bool paintface_minmax(Object *ob, float r_min[3], float r_max[3])
   component.replace(const_cast<Mesh *>(me), GeometryOwnershipType::ReadOnly);
 
   const VArray<bool> face_hide = component.attribute_get_for_read<bool>(
-      ".face_hide", ATTR_DOMAIN_FACE, false);
+      ".hide_face", ATTR_DOMAIN_FACE, false);
 
   for (int i = 0; i < me->totpoly; i++) {
     MPoly *mp = &me->mpoly[i];
@@ -396,7 +396,7 @@ bool paintface_mouse_select(bContext *C,
   component.replace(const_cast<Mesh *>(me), GeometryOwnershipType::ReadOnly);
 
   const VArray<bool> face_hide = component.attribute_get_for_read<bool>(
-      ".face_hide", ATTR_DOMAIN_FACE, false);
+      ".hide_face", ATTR_DOMAIN_FACE, false);
 
   if (ED_mesh_pick_face(C, ob, mval, ED_MESH_PICK_DEFAULT_FACE_DIST, &index)) {
     if (index < me->totpoly) {

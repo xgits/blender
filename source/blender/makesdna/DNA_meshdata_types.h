@@ -355,7 +355,7 @@ typedef struct MDisps {
 
   /**
    * Used for hiding parts of a multires mesh.
-   * Essentially the multires equivalent of the mesh ".vert_hide" boolean layer.
+   * Essentially the multires equivalent of the mesh ".hide_vert" boolean layer.
    *
    * \note This is a bitmap, keep in sync with type used in BLI_bitmap.h
    */

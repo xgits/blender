@@ -1288,7 +1288,7 @@ BVHTree *BKE_bvhtree_from_mesh_get(struct BVHTreeFromMesh *data,
 
       mask = looptri_no_hidden_map_get(
           mesh->mpoly,
-          component.attribute_get_for_read<bool>(".face_hide", ATTR_DOMAIN_FACE, false),
+          component.attribute_get_for_read<bool>(".hide_face", ATTR_DOMAIN_FACE, false),
           looptri_len,
           &mask_bits_act_len);
       ATTR_FALLTHROUGH;

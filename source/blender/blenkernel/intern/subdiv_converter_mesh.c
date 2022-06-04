@@ -206,7 +206,7 @@ static void precalc_uv_layer(const OpenSubdiv_Converter *converter, const int la
   }
   UvVertMap *uv_vert_map = BKE_mesh_uv_vert_map_create(
       mpoly,
-      (const bool *)CustomData_get_layer_named(&mesh->pdata, CD_PROP_BOOL, ".face_hide"),
+      (const bool *)CustomData_get_layer_named(&mesh->pdata, CD_PROP_BOOL, ".hide_face"),
       mloop,
       mloopuv,
       num_poly,

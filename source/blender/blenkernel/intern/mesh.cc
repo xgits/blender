@@ -216,14 +216,14 @@ static void prepare_legacy_hide_data_for_writing(Mesh &mesh)
 
   MutableSpan<MVert> verts(mesh.mvert, mesh.totvert);
   const VArray<bool> vert_hide = component.attribute_get_for_read<bool>(
-      ".vert_hide", ATTR_DOMAIN_POINT, false);
+      ".hide_vert", ATTR_DOMAIN_POINT, false);
   for (const int i : verts.index_range()) {
     SET_FLAG_FROM_TEST(verts[i].flag, vert_hide[i], ME_HIDE);
   }
 
   MutableSpan<MEdge> edges(mesh.medge, mesh.totedge);
   const VArray<bool> edge_hide = component.attribute_get_for_read<bool>(
-      ".edge_hide", ATTR_DOMAIN_EDGE, false);
+      ".hide_edge", ATTR_DOMAIN_EDGE, false);
   for (const int i : edges.index_range()) {
     SET_FLAG_FROM_TEST(edges[i].flag, edge_hide[i], ME_HIDE);
   }

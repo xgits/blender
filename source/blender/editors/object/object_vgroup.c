@@ -1028,7 +1028,7 @@ static void vgroup_select_verts(Object *ob, int select)
     }
     else {
       if (me->dvert) {
-        const bool *vert_hide = CustomData_get_layer_named(&me->vdata, CD_PROP_BOOL, ".vert_hide");
+        const bool *vert_hide = CustomData_get_layer_named(&me->vdata, CD_PROP_BOOL, ".hide_vert");
         MVert *mv;
         MDeformVert *dv;
         int i;
@@ -1926,7 +1926,7 @@ static void vgroup_smooth_subset(Object *ob,
 #define IS_BM_VERT_WRITE(v) (use_select ? (BM_elem_flag_test(v, BM_ELEM_SELECT) != 0) : true)
 
   const bool *vert_hide = me ? (const bool *)CustomData_get_layer_named(
-                                   &me->vdata, CD_PROP_BOOL, ".vert_hide") :
+                                   &me->vdata, CD_PROP_BOOL, ".hide_vert") :
                                NULL;
 
 #define IS_ME_VERT_READ(v) (use_hide ? (vert_hide && vert_hide[v]) : true)

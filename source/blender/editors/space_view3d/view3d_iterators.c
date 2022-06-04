@@ -300,7 +300,7 @@ void meshobject_foreachScreenVert(
   data.userData = userData;
   data.clip_flag = clip_flag;
   data.vert_hide = (const bool *)CustomData_get_layer_named(
-      &me->vdata, CD_PROP_BOOL, ".vert_hide");
+      &me->vdata, CD_PROP_BOOL, ".hide_vert");
 
   if (clip_flag & V3D_PROJ_TEST_CLIP_BB) {
     ED_view3d_clipping_local(vc->rv3d, vc->obact->obmat);

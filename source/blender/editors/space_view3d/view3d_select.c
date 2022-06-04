@@ -345,7 +345,7 @@ static bool edbm_backbuf_check_and_select_verts_obmode(Mesh *me,
   const BLI_bitmap *select_bitmap = esel->select_bitmap;
 
   const bool *vert_hide = (const bool *)CustomData_get_layer_named(
-      &me->vdata, CD_PROP_BOOL, ".vert_hide");
+      &me->vdata, CD_PROP_BOOL, ".hide_vert");
 
   for (int index = 0; index < me->totvert; index++, mv++) {
     if (!(vert_hide && vert_hide[index])) {
@@ -376,7 +376,7 @@ static bool edbm_backbuf_check_and_select_faces_obmode(Mesh *me,
   const BLI_bitmap *select_bitmap = esel->select_bitmap;
 
   const bool *face_hide = (const bool *)CustomData_get_layer_named(
-      &me->vdata, CD_PROP_BOOL, ".face_hide");
+      &me->vdata, CD_PROP_BOOL, ".hide_face");
 
   for (int index = 0; index < me->totpoly; index++, mpoly++) {
     if (!(face_hide && face_hide[index])) {

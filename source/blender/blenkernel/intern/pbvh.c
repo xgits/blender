@@ -562,7 +562,7 @@ void BKE_pbvh_build_mesh(PBVH *pbvh,
   pbvh->verts = verts;
   BKE_mesh_vertex_normals_ensure(mesh);
   pbvh->vert_normals = BKE_mesh_vertex_normals_for_write(mesh);
-  pbvh->vert_hide = (bool *)CustomData_get_layer_named(&mesh->vdata, CD_PROP_BOOL, ".vert_hide");
+  pbvh->vert_hide = (bool *)CustomData_get_layer_named(&mesh->vdata, CD_PROP_BOOL, ".hide_vert");
   pbvh->vert_bitmap = MEM_calloc_arrayN(totvert, sizeof(bool), "bvh->vert_bitmap");
   pbvh->totvert = totvert;
   pbvh->leaf_limit = LEAF_LIMIT;
@@ -3155,12 +3155,12 @@ bool *BKE_pbvh_get_vert_hide_for_write(PBVH *pbvh)
   if (pbvh->vert_hide) {
     return pbvh->vert_hide;
   }
-  pbvh->vert_hide = CustomData_get_layer_named(&pbvh->mesh->vdata, CD_PROP_BOOL, ".vert_hide");
+  pbvh->vert_hide = CustomData_get_layer_named(&pbvh->mesh->vdata, CD_PROP_BOOL, ".hide_vert");
   if (pbvh->vert_hide) {
     return pbvh->vert_hide;
   }
   pbvh->vert_hide = (bool *)CustomData_add_layer_named(
-      &pbvh->mesh->vdata, CD_PROP_BOOL, CD_CALLOC, NULL, pbvh->mesh->totvert, ".vert_hide");
+      &pbvh->mesh->vdata, CD_PROP_BOOL, CD_CALLOC, NULL, pbvh->mesh->totvert, ".hide_vert");
   return pbvh->vert_hide;
 }
 

@@ -1418,7 +1418,7 @@ bool ED_mesh_pick_vert(
     data.len_best = FLT_MAX;
     data.v_idx_best = -1;
     data.vert_hide = (const bool *)CustomData_get_layer_named(
-        &me_eval->vdata, CD_PROP_BOOL, ".vert_hide");
+        &me_eval->vdata, CD_PROP_BOOL, ".hide_vert");
 
     BKE_mesh_foreach_mapped_vert(me_eval, ed_mesh_pick_vert__mapFunc, &data, MESH_FOREACH_NOP);
 

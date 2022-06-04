@@ -2327,7 +2327,7 @@ bool CustomData_merge(const CustomData *source,
 
 static bool layer_stored_in_bmesh(const StringRef name)
 {
-  return ELEM(name, ".hide_face", ".hide_edge", ".hide_face");
+  return ELEM(name, ".hide_vert", ".hide_edge", ".hide_face");
 }
 
 static CustomData shallow_copy_remove_non_bmesh_attributes(const CustomData &src)
@@ -2946,6 +2946,18 @@ bool CustomData_free_layer(CustomData *data, int type, int totelem, int index)
   customData_update_offsets(data);
 
   return true;
+}
+
+bool CustomData_free_layer_named(CustomData *data, const char *name, const int totelem)
+{
+  for (const int i : IndexRange(data->totlayer)) {
+    const CustomDataLayer &layer = data->layers[i];
+    if (StringRef(layer.name) == name) {
+      CustomData_free_layer(data, layer.type, totelem, i);
+      return true;
+    }
+  }
+  return false;
 }
 
 bool CustomData_free_layer_active(CustomData *data, int type, int totelem)

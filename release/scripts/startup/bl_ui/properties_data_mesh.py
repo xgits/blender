@@ -1,6 +1,4 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-
-# <pep8 compliant>
 import bpy
 from bpy.types import Menu, Panel, UIList
 from rna_prop_ui import PropertyPanel
@@ -504,7 +502,7 @@ class MESH_UL_attributes(UIList):
 
         for index, item in enumerate(attributes):
             flags.append(self.bitflag_filter_item if item.is_internal else 0)
-        
+
         return flags, indices
 
     def draw_item(self, _context, layout, _data, attribute, _icon, _active_data, _active_propname, _index):

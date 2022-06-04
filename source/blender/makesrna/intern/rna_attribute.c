@@ -106,6 +106,11 @@ const EnumPropertyItem rna_enum_color_attribute_domain_items[] = {
     {ATTR_DOMAIN_CORNER, "CORNER", 0, "Face Corner", ""},
     {0, NULL, 0, NULL, NULL}};
 
+const EnumPropertyItem rna_enum_attribute_curves_domain_items[] = {
+    {ATTR_DOMAIN_POINT, "POINT", 0, "Control Point", ""},
+    {ATTR_DOMAIN_CURVE, "CURVE", 0, "Curve", ""},
+    {0, NULL, 0, NULL, NULL}};
+
 #ifdef RNA_RUNTIME
 
 #  include "BLI_math.h"
@@ -124,7 +129,7 @@ static char *rna_Attribute_path(const PointerRNA *ptr)
   return BLI_sprintfN("attributes['%s']", layer->name);
 }
 
-static StructRNA *srna_by_custom_data_layer_type(const CustomDataType type)
+static StructRNA *srna_by_custom_data_layer_type(const eCustomDataType type)
 {
   switch (type) {
     case CD_PROP_FLOAT:
@@ -373,7 +378,7 @@ static int rna_Attributes_noncolor_layer_skip(CollectionPropertyIterator *iter, 
 
   /* Check valid domain here, too, keep in line with rna_AttributeGroup_color_length(). */
   ID *id = iter->parent.owner_id;
-  AttributeDomain domain = BKE_id_attribute_domain(id, layer);
+  eAttrDomain domain = BKE_id_attribute_domain(id, layer);
   if (!ELEM(domain, ATTR_DOMAIN_POINT, ATTR_DOMAIN_CORNER)) {
     return 1;
   }

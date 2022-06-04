@@ -1698,6 +1698,8 @@ void BKE_brush_sculpt_reset(Brush *br)
    * assign this so logic below can remain the same. */
   br->alpha = 0.5f;
 
+  br->automasking_cavity_factor = 0.5f;
+
   /* Brush settings */
   switch (br->sculpt_tool) {
     case SCULPT_TOOL_DRAW_SHARP:

@@ -944,6 +944,14 @@ def brush_settings_advanced(layout, context, brush, popover=False):
         # boundary edges/face sets automasking
         col.prop(brush, "use_automasking_boundary_edges", text="Mesh Boundary")
         col.prop(brush, "use_automasking_boundary_face_sets", text="Face Sets Boundary")
+        col.prop(brush, "use_automasking_cavity", text="Cavity Masking")
+
+        col.separator()
+
+        if brush.use_automasking_cavity:
+            col.prop(brush, "invert_automasking_cavity", text="Invert Cavity")
+            col.prop(brush, "automasking_cavity_factor", text="Cavity Factor")
+
         col.prop(brush, "automasking_boundary_edges_propagation_steps")
 
         layout.separator()

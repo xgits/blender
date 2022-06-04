@@ -3021,6 +3021,12 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
+  if (!DNA_struct_elem_find(fd->filesdna, "Brush", "float", "automasking_cavity_factor")) {
+    LISTBASE_FOREACH (Brush *, brush, &bmain->brushes) {
+      brush->automasking_cavity_factor = 0.5f;
+    }
+  }
+
   /**
    * Versioning code until next subversion bump goes here.
    *

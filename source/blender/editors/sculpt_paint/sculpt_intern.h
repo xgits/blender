@@ -378,6 +378,7 @@ typedef struct AutomaskingSettings {
   /* Flags from eAutomasking_flag. */
   int flags;
   int initial_face_set;
+  float cavity_factor;
 } AutomaskingSettings;
 
 typedef struct AutomaskingCache {
@@ -1778,6 +1779,7 @@ void SCULPT_bmesh_topology_rake(
 /* sculpt_ops.c */
 
 void SCULPT_OT_brush_stroke(struct wmOperatorType *ot);
+float SCULPT_calc_cavity(SculptSession *ss, const int vertex);
 
 /* end sculpt_ops.c */
 

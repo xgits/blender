@@ -3125,6 +3125,24 @@ static void rna_def_brush(BlenderRNA *brna)
                            "Do not affect vertices that belong to a Face Set boundary");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
+  prop = RNA_def_property(srna, "use_automasking_cavity", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "automasking_flags", BRUSH_AUTOMASKING_CAVITY);
+  RNA_def_property_ui_text(prop, "Invert Cavity Mask", "Invert cavity masking.");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
+  prop = RNA_def_property(srna, "invert_automasking_cavity", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "automasking_flags", BRUSH_AUTOMASKING_CAVITY_INVERT);
+  RNA_def_property_ui_text(prop, "Invert Cavity Mask", "Invert cavity masking.");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
+  prop = RNA_def_property(srna, "automasking_cavity_factor", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_float_sdna(prop, NULL, "automasking_cavity_factor");
+  RNA_def_property_ui_text(prop, "Cavity Factor", "Cavity mask factor");
+  RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.1, 3);
+  RNA_def_property_range(prop, 0.0f, 5.0f);
+
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
   prop = RNA_def_property(srna, "use_scene_spacing", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_bitflag_sdna(prop, NULL, "flag");
   RNA_def_property_enum_items(prop, brush_spacing_unit_items);

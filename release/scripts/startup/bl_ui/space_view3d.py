@@ -5450,6 +5450,8 @@ class VIEW3D_MT_sculpt_automasking_pie(Menu):
         pie.prop(sculpt, "use_automasking_face_sets", text="Face Sets")
         pie.prop(sculpt, "use_automasking_boundary_edges", text="Mesh Boundary")
         pie.prop(sculpt, "use_automasking_boundary_face_sets", text="Face Sets Boundary")
+        pie.prop(sculpt, "use_automasking_cavity", text="Cavity")
+        pie.prop(sculpt, "invert_automasking_cavity", text="Invert Cavity")
 
 
 class VIEW3D_MT_sculpt_face_sets_edit_pie(Menu):

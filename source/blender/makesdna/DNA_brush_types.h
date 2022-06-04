@@ -271,7 +271,7 @@ typedef struct Brush {
   char gpencil_weight_tool;
   /** Active curves sculpt tool (#eBrushCurvesSculptTool). */
   char curves_sculpt_tool;
-  char _pad1[5];
+  char _pad1[1];
 
   float autosmooth_factor;
 
@@ -301,6 +301,7 @@ typedef struct Brush {
   /* automasking */
   int automasking_flags;
   int automasking_boundary_edges_propagation_steps;
+  float automasking_cavity_factor;
 
   int elastic_deform_type;
   float elastic_deform_volume_preservation;

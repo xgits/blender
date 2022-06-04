@@ -887,6 +887,16 @@ static void rna_def_sculpt(BlenderRNA *brna)
                            "Do not affect vertices that belong to a Face Set boundary");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
+  prop = RNA_def_property(srna, "use_automasking_cavity", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "automasking_flags", BRUSH_AUTOMASKING_CAVITY);
+  RNA_def_property_ui_text(prop, "Invert Cavity Mask", "Invert cavity masking.");
+  RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
+
+  prop = RNA_def_property(srna, "invert_automasking_cavity", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "automasking_flags", BRUSH_AUTOMASKING_CAVITY_INVERT);
+  RNA_def_property_ui_text(prop, "Invert Cavity Mask", "Invert cavity masking.");
+  RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
+
   prop = RNA_def_property(srna, "symmetrize_direction", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, rna_enum_symmetrize_direction_items);
   RNA_def_property_ui_text(prop, "Direction", "Source and destination for symmetrize operator");

@@ -659,6 +659,10 @@ typedef struct SculptSession {
    */
   char *last_paint_canvas_key;
 
+  int stroke_id;
+
+  float *cavity_factor;
+  int *cavity_stroke_id;
 } SculptSession;
 
 void BKE_sculptsession_free(struct Object *ob);

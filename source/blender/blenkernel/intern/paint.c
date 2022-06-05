@@ -1514,6 +1514,8 @@ void BKE_sculptsession_free(Object *ob)
     BKE_sculptsession_free_vwpaint_data(ob->sculpt);
 
     MEM_SAFE_FREE(ss->last_paint_canvas_key);
+    MEM_SAFE_FREE(ss->cavity_factor);
+    MEM_SAFE_FREE(ss->cavity_stroke_id);
 
     MEM_freeN(ss);
 

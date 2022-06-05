@@ -4188,6 +4188,8 @@ static void sculpt_update_cache_invariants(
 
   ss->cache = cache;
 
+  cache->stroke_id = ss->stroke_id;
+
   /* Set scaling adjustment. */
   max_scale = 0.0f;
   for (int i = 0; i < 3; i++) {
@@ -5342,6 +5344,8 @@ static bool sculpt_stroke_test_start(bContext *C, struct wmOperator *op, const f
     else {
       SCULPT_undo_push_begin(ob, sculpt_tool_name(sd));
     }
+
+    ss->stroke_id++;
 
     return true;
   }

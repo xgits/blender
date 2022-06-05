@@ -951,6 +951,7 @@ def brush_settings_advanced(layout, context, brush, popover=False):
         if brush.use_automasking_cavity:
             col.prop(brush, "invert_automasking_cavity", text="Invert Cavity")
             col.prop(brush, "automasking_cavity_factor", text="Cavity Factor")
+            col.prop(brush, "automasking_cavity_blur_steps", text="Cavity Blur")
 
         col.prop(brush, "automasking_boundary_edges_propagation_steps")
 

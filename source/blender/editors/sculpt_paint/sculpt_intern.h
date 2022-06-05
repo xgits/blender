@@ -395,6 +395,7 @@ typedef struct AutomaskingSettings {
   int flags;
   int initial_face_set;
   float cavity_factor;
+  int cavity_blur_steps;
 } AutomaskingSettings;
 
 typedef struct AutomaskingCache {
@@ -632,6 +633,7 @@ typedef struct StrokeCache {
   rcti previous_r; /* previous redraw rectangle */
   rcti current_r;  /* current redraw rectangle */
 
+  int stroke_id;
 } StrokeCache;
 
 /* -------------------------------------------------------------------- */

@@ -1786,13 +1786,6 @@ bool initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   t->launch_event = event ? WM_userdef_event_type_from_keymap_type(event->type) : -1;
   t->is_launch_event_drag = event ? (event->val == KM_CLICK_DRAG) : false;
 
-  /* XXX Remove this when wm_operator_call_internal doesn't use window->eventstate
-   * (which can have type = 0) */
-  /* For gizmo only, so assume LEFTMOUSE. */
-  if (t->launch_event == 0) {
-    t->launch_event = LEFTMOUSE;
-  }
-
   unit_m3(t->spacemtx);
 
   initTransInfo(C, t, op, event);
@@ -2060,4 +2053,18 @@ bool checkUseAxisMatrix(TransInfo *t)
   }
 
   return false;
+}
+
+bool transform_apply_matrix(TransInfo *t, float mat[4][4])
+{
+  if (t->transform_matrix != NULL) {
+    t->transform_matrix(t, mat);
+    return true;
+  }
+  return false;
+}
+
+void transform_final_value_get(const TransInfo *t, float *value, const int value_num)
+{
+  memcpy(value, t->values_final, sizeof(float) * value_num);
 }

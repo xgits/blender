@@ -175,7 +175,7 @@ static void rna_ImageUser_relations_update(Main *bmain, Scene *scene, PointerRNA
   DEG_relations_tag_update(bmain);
 }
 
-static char *rna_ImageUser_path(PointerRNA *ptr)
+static char *rna_ImageUser_path(const PointerRNA *ptr)
 {
   if (ptr->owner_id) {
     /* ImageUser *iuser = ptr->data; */
@@ -255,6 +255,51 @@ static void rna_Image_file_format_set(PointerRNA *ptr, int value)
     int ftype = BKE_imtype_to_ftype(value, &options);
     BKE_image_file_format_set(image, ftype, &options);
   }
+}
+
+static void rna_UDIMTile_size_get(PointerRNA *ptr, int *values)
+{
+  ImageTile *tile = (ImageTile *)ptr->data;
+  Image *image = (Image *)ptr->owner_id;
+
+  ImageUser image_user;
+  BKE_imageuser_default(&image_user);
+  image_user.tile = tile->tile_number;
+
+  void *lock;
+  ImBuf *ibuf = BKE_image_acquire_ibuf(image, &image_user, &lock);
+  if (ibuf) {
+    values[0] = ibuf->x;
+    values[1] = ibuf->y;
+  }
+  else {
+    values[0] = 0;
+    values[1] = 0;
+  }
+
+  BKE_image_release_ibuf(image, ibuf, lock);
+}
+
+static int rna_UDIMTile_channels_get(PointerRNA *ptr)
+{
+  ImageTile *tile = (ImageTile *)ptr->data;
+  Image *image = (Image *)ptr->owner_id;
+
+  ImageUser image_user;
+  BKE_imageuser_default(&image_user);
+  image_user.tile = tile->tile_number;
+
+  int channels = 0;
+
+  void *lock;
+  ImBuf *ibuf = BKE_image_acquire_ibuf(image, &image_user, &lock);
+  if (ibuf) {
+    channels = ibuf->channels;
+  }
+
+  BKE_image_release_ibuf(image, ibuf, lock);
+
+  return channels;
 }
 
 static void rna_UDIMTile_label_get(PointerRNA *ptr, char *value)
@@ -397,7 +442,7 @@ static void rna_Image_resolution_set(PointerRNA *ptr, const float *values)
 static int rna_Image_bindcode_get(PointerRNA *ptr)
 {
   Image *ima = (Image *)ptr->data;
-  GPUTexture *tex = ima->gputexture[TEXTARGET_2D][0][IMA_TEXTURE_RESOLUTION_FULL];
+  GPUTexture *tex = ima->gputexture[TEXTARGET_2D][0];
   return (tex) ? GPU_texture_opengl_bindcode(tex) : 0;
 }
 
@@ -446,7 +491,7 @@ static int rna_Image_frame_duration_get(PointerRNA *ptr)
   return duration;
 }
 
-static int rna_Image_pixels_get_length(PointerRNA *ptr, int length[RNA_MAX_ARRAY_DIMENSION])
+static int rna_Image_pixels_get_length(const PointerRNA *ptr, int length[RNA_MAX_ARRAY_DIMENSION])
 {
   Image *ima = (Image *)ptr->owner_id;
   ImBuf *ibuf;
@@ -826,6 +871,26 @@ static void rna_def_udim_tile(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Number", "Number of the position that this tile covers");
   RNA_def_property_int_funcs(prop, NULL, "rna_UDIMTile_tile_number_set", NULL);
   RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, NULL);
+
+  prop = RNA_def_int_vector(
+      srna,
+      "size",
+      2,
+      NULL,
+      0,
+      0,
+      "Size",
+      "Width and height of the tile buffer in pixels, zero when image data can't be loaded",
+      0,
+      0);
+  RNA_def_property_subtype(prop, PROP_PIXEL);
+  RNA_def_property_int_funcs(prop, "rna_UDIMTile_size_get", NULL, NULL);
+  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+
+  prop = RNA_def_property(srna, "channels", PROP_INT, PROP_UNSIGNED);
+  RNA_def_property_int_funcs(prop, "rna_UDIMTile_channels_get", NULL, NULL);
+  RNA_def_property_ui_text(prop, "Channels", "Number of channels in the tile pixels buffer");
+  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 }
 
 static void rna_def_udim_tiles(BlenderRNA *brna, PropertyRNA *cprop)

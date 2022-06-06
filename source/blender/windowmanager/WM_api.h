@@ -388,6 +388,12 @@ struct wmEventHandler_UI *WM_event_add_ui_handler(const struct bContext *C,
                                                   wmUIHandlerRemoveFunc remove_fn,
                                                   void *user_data,
                                                   char flag);
+
+/**
+ * Return the first modal operator of type \a ot or NULL.
+ */
+wmOperator *WM_operator_find_modal_by_type(wmWindow *win, const wmOperatorType *ot);
+
 /**
  * \param postpone: Enable for `win->modalhandlers`,
  * this is in a running for () loop in wm_handlers_do().
@@ -781,13 +787,18 @@ void WM_operator_properties_filesel(struct wmOperatorType *ot,
  */
 void WM_operator_properties_id_lookup_set_from_id(PointerRNA *ptr, const ID *id);
 /**
- * Tries to find an ID in \a bmain. There needs to be either a "name" string or "session_uuid" int
+ * Tries to find an ID in \a bmain. There needs to be either a "session_uuid" int or "name" string
  * property defined and set. The former has priority. See #WM_operator_properties_id_lookup() for a
  * helper to add the properties.
  */
 struct ID *WM_operator_properties_id_lookup_from_name_or_session_uuid(struct Main *bmain,
-                                                                      const struct wmOperator *op,
+                                                                      PointerRNA *ptr,
                                                                       enum ID_Type type);
+/**
+ * Check if either the "session_uuid" or "name" property is set inside \a ptr. If this is the case
+ * the ID can be looked up by #WM_operator_properties_id_lookup_from_name_or_session_uuid().
+ */
+bool WM_operator_properties_id_lookup_is_set(PointerRNA *ptr);
 /**
  * Adds "name" and "session_uuid" properties so the caller can tell the operator which ID to act
  * on. See #WM_operator_properties_id_lookup_from_name_or_session_uuid(). Both properties will be
@@ -969,6 +980,14 @@ bool WM_operatortype_remove(const char *idname);
  * Remove memory of all previously executed tools.
  */
 void WM_operatortype_last_properties_clear_all(void);
+
+void WM_operatortype_idname_visit_for_search(const struct bContext *C,
+                                             PointerRNA *ptr,
+                                             PropertyRNA *prop,
+                                             const char *edit_text,
+                                             StringPropertySearchVisitFunc visit_fn,
+                                             void *visit_user_data);
+
 /**
  * Tag all operator-properties of \a ot defined after calling this, until
  * the next #WM_operatortype_props_advanced_end call (if available), with
@@ -1072,6 +1091,13 @@ void WM_menutype_freelink(struct MenuType *mt);
 void WM_menutype_free(void);
 bool WM_menutype_poll(struct bContext *C, struct MenuType *mt);
 
+void WM_menutype_idname_visit_for_search(const struct bContext *C,
+                                         struct PointerRNA *ptr,
+                                         struct PropertyRNA *prop,
+                                         const char *edit_text,
+                                         StringPropertySearchVisitFunc visit_fn,
+                                         void *visit_user_data);
+
 /* wm_panel_type.c */
 
 /**
@@ -1082,6 +1108,13 @@ void WM_paneltype_clear(void);
 struct PanelType *WM_paneltype_find(const char *idname, bool quiet);
 bool WM_paneltype_add(struct PanelType *pt);
 void WM_paneltype_remove(struct PanelType *pt);
+
+void WM_paneltype_idname_visit_for_search(const struct bContext *C,
+                                          struct PointerRNA *ptr,
+                                          struct PropertyRNA *prop,
+                                          const char *edit_text,
+                                          StringPropertySearchVisitFunc visit_fn,
+                                          void *visit_user_data);
 
 /* wm_gesture_ops.c */
 
@@ -1373,6 +1406,14 @@ void WM_jobs_callbacks(struct wmJob *,
                        void (*update)(void *),
                        void (*endjob)(void *));
 
+void WM_jobs_callbacks_ex(wmJob *wm_job,
+                          wm_jobs_start_callback startjob,
+                          void (*initjob)(void *),
+                          void (*update)(void *),
+                          void (*endjob)(void *),
+                          void (*completed)(void *),
+                          void (*canceled)(void *));
+
 /**
  * If job running, the same owner gave it a new job.
  * if different owner starts existing startjob, it suspends itself
@@ -1399,6 +1440,7 @@ void WM_jobs_kill_all_except(struct wmWindowManager *wm, const void *owner);
 void WM_jobs_kill_type(struct wmWindowManager *wm, const void *owner, int job_type);
 
 bool WM_jobs_has_running(const struct wmWindowManager *wm);
+bool WM_jobs_has_running_type(const struct wmWindowManager *wm, int job_type);
 
 void WM_job_main_thread_lock_acquire(struct wmJob *job);
 void WM_job_main_thread_lock_release(struct wmJob *job);
@@ -1673,7 +1715,7 @@ void WM_xr_action_binding_destroy(wmXrData *xr,
 /**
  * If action_set_name is NULL, then all action sets will be treated as active.
  */
-bool WM_xr_active_action_set_set(wmXrData *xr, const char *action_set_name);
+bool WM_xr_active_action_set_set(wmXrData *xr, const char *action_set_name, bool delayed);
 
 bool WM_xr_controller_pose_actions_set(wmXrData *xr,
                                        const char *action_set_name,

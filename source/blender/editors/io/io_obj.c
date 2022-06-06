@@ -261,7 +261,7 @@ void WM_OT_obj_export(struct wmOperatorType *ot)
   ot->ui = wm_obj_export_draw;
   ot->check = wm_obj_export_check;
 
-  ot->flag |= OPTYPE_PRESET;
+  ot->flag = OPTYPE_PRESET;
 
   WM_operator_properties_filesel(ot,
                                  FILE_TYPE_FOLDER,
@@ -456,6 +456,7 @@ void WM_OT_obj_import(struct wmOperatorType *ot)
   ot->name = "Import Wavefront OBJ";
   ot->description = "Load a Wavefront OBJ scene";
   ot->idname = "WM_OT_obj_import";
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   ot->invoke = wm_obj_import_invoke;
   ot->exec = wm_obj_import_exec;

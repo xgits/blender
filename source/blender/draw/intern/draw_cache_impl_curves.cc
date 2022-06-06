@@ -512,9 +512,9 @@ static bool curves_ensure_attributes(const Curves &curves,
   ListBase gpu_attrs = GPU_material_attributes(gpu_material);
   LISTBASE_FOREACH (GPUMaterialAttribute *, gpu_attr, &gpu_attrs) {
     const char *name = gpu_attr->name;
-    int type = gpu_attr->type;
+    eCustomDataType type = static_cast<eCustomDataType>(gpu_attr->type);
     int layer = -1;
-    AttributeDomain domain;
+    eAttrDomain domain;
 
     if (drw_custom_data_match_attribute(cd_curve, name, &layer, &type)) {
       domain = ATTR_DOMAIN_CURVE;
@@ -538,7 +538,7 @@ static bool curves_ensure_attributes(const Curves &curves,
       case CD_PROP_COLOR: {
         if (layer != -1) {
           DRW_AttributeRequest *req = drw_attributes_add_request(
-              &attrs_needed, (CustomDataType)type, layer, domain);
+              &attrs_needed, (eCustomDataType)type, layer, domain);
           if (req) {
             BLI_strncpy(req->attribute_name, name, sizeof(req->attribute_name));
           }

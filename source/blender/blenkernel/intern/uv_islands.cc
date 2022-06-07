@@ -3,13 +3,17 @@
 
 #include "BKE_uv_islands.hh"
 
+#include <optional>
+
 namespace blender::bke::uv_islands {
+
 /* -------------------------------------------------------------------- */
 /** \name UVIsland
  * \{ */
 
-void UVIsland::extract_border()
+void UVIsland::extract_borders()
 {
+  /* Lookup all borders of the island. */
   Vector<UVBorderEdge> edges;
   for (int64_t prim_index = 0; prim_index < uv_primitives.size(); prim_index++) {
     UVPrimitive &prim = uv_primitives[prim_index];
@@ -21,72 +25,38 @@ void UVIsland::extract_border()
   }
 
   while (true) {
-    UVBorder border;
-    /* Find a part of the border that haven't been extracted yet. */
-    UVBorderEdge *starting_border_edge = nullptr;
-    for (UVBorderEdge &edge : edges) {
-      if (edge.tag == false) {
-        starting_border_edge = &edge;
-        break;
-      }
-    }
-    if (starting_border_edge == nullptr) {
+    std::optional<UVBorder> border = UVBorder::extract_from_edges(edges);
+    if (!border.has_value()) {
       break;
     }
-
-    starting_border_edge->tag = true;
-    float2 first_uv = starting_border_edge->edge->vertices[0]->uv;
-    float2 current_uv = starting_border_edge->edge->vertices[1]->uv;
-    UVVertex *current_vert = starting_border_edge->edge->vertices[1];
-    border.verts.append(UVBorderVert(starting_border_edge->edge->vertices[0]));
-    while (current_uv != first_uv) {
-      for (UVBorderEdge &border_edge : edges) {
-        if (border_edge.tag == true) {
-          continue;
-        }
-        int i;
-        for (i = 0; i < 2; i++) {
-          if (border_edge.edge->vertices[i]->uv == current_uv) {
-            border.verts.append(UVBorderVert(current_vert));
-            current_uv = border_edge.edge->vertices[1 - i]->uv;
-            current_vert = border_edge.edge->vertices[1 - i];
-            border_edge.tag = true;
-            break;
-          }
-        }
-        if (i != 2) {
-          break;
-        }
-      }
-    }
-    borders.append(border);
+    borders.append(*border);
   }
 }
 
-static UVBorderVert *sharpest_border_vert(UVBorder &border, float *r_angle)
+static std::optional<UVBorderCorner> sharpest_border_corner(UVBorder &border, float *r_angle)
 {
   *r_angle = std::numeric_limits<float>::max();
-  UVBorderVert *result = nullptr;
-  for (UVBorderVert &vert : border.verts) {
-    if (vert.flags.extendable == false) {
+  std::optional<UVBorderCorner> result;
+  for (UVBorderEdge &edge : border.edges) {
+    if (edge.flags.extendable == false) {
       continue;
     }
-    float new_radius = border.outside_angle(vert);
+    float new_radius = border.outside_angle(edge);
     if (new_radius < *r_angle) {
       *r_angle = new_radius;
-      result = &vert;
+      result = UVBorderCorner(border.edges[edge.prev_index], edge);
     }
   }
   return result;
 }
 
-static UVBorderVert *sharpest_border_vert(UVIsland &island)
+static std::optional<UVBorderCorner> sharpest_border_corner(UVIsland &island)
 {
-  UVBorderVert *result = nullptr;
+  std::optional<UVBorderCorner> result;
   float sharpest_angle = std::numeric_limits<float>::max();
   for (UVBorder &border : island.borders) {
     float new_radius;
-    UVBorderVert *new_result = sharpest_border_vert(border, &new_radius);
+    std::optional<UVBorderCorner> new_result = sharpest_border_corner(border, &new_radius);
     if (new_radius < sharpest_angle) {
       sharpest_angle = new_radius;
       result = new_result;
@@ -168,7 +138,7 @@ struct Fan {
     }
   }
 
-  void init_uv_coordinates(UVBorderVert &vert, const UVIsland &island)
+  void init_uv_coordinates(UVVertex &uv_vertex, const UVIsland &island)
   {
     for (FanSegment &segment : segments) {
       int2 test_edge = int2(segment.primitive->vertices[segment.vert_order[0]].vertex->v,
@@ -178,9 +148,9 @@ struct Fan {
           int2 o(edge->vertices[0]->vertex->v, edge->vertices[1]->vertex->v);
           if ((test_edge.x == o.x && test_edge.y == o.y) ||
               (test_edge.x == o.y && test_edge.y == o.x)) {
-            segment.uvs[0] = vert.uv_vertex->uv;
+            segment.uvs[0] = uv_vertex.uv;
             for (int i = 0; i < 2; i++) {
-              if (edge->vertices[i]->uv == vert.uv_vertex->uv) {
+              if (edge->vertices[i]->uv == uv_vertex.uv) {
                 segment.uvs[1] = edge->vertices[1 - i]->uv;
                 break;
               }
@@ -211,18 +181,20 @@ static void print(const Fan &fan)
   }
 }
 
-static void extend_at_vert(UVIsland &island, UVBorderVert &vert, const MeshData &mesh_data)
+static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshData &mesh_data)
 {
-  Fan fan(*vert.uv_vertex->vertex);
+  BLI_assert(corner.first.get_uv_vertex(1) == corner.second.get_uv_vertex(0));
+  UVVertex *uv_vertex = corner.second.get_uv_vertex(0);
+  Fan fan(*(uv_vertex->vertex));
   print(fan);
-  fan.init_uv_coordinates(vert, island);
+  fan.init_uv_coordinates(*uv_vertex, island);
   print(fan);
 
   for (FanSegment &segment : fan.segments) {
     segment.flags.found = false;
     MeshVertex *v0 = segment.primitive->vertices[segment.vert_order[0]].vertex;
     MeshVertex *v1 = segment.primitive->vertices[segment.vert_order[1]].vertex;
-    for (UVEdge *edge : vert.uv_vertex->uv_edges) {
+    for (UVEdge *edge : uv_vertex->uv_edges) {
       if ((edge->vertices[0]->vertex == v0 && edge->vertices[1]->vertex == v1) ||
           (edge->vertices[0]->vertex == v1 && edge->vertices[1]->vertex == v0)) {
         segment.flags.found = true;
@@ -244,34 +216,59 @@ static void extend_at_vert(UVIsland &island, UVBorderVert &vert, const MeshData 
   printf("Found %d new edges to add\n", num_to_add);
 
   if (num_to_add == 0) {
-    // no new triangles found. In this case we should extend the exising borders.
-    UVBorder &border = island.borders[vert.border_index];
-
-    UVVertex center_vertex;
-    center_vertex.loop = border.verts[vert.next_index].uv_vertex->loop;
-    center_vertex.uv = (border.verts[vert.next_index].uv_vertex->uv +
-                        border.verts[vert.prev_index].uv_vertex->uv) /
+    float2 center_uv = (corner.first.get_uv_vertex(0)->uv + corner.second.get_uv_vertex(1)->uv) /
                        2.0f;
-    center_vertex.vertex = border.verts[vert.next_index].uv_vertex->vertex;
+    // no new triangles found. In this case we should extend the existing borders.
+    UVVertex center_vertex;
+    center_vertex.loop = uv_vertex->loop;
+    center_vertex.uv = center_uv;
     center_vertex.uv_edges.clear();
-    UVVertex *center_vertex_ptr = island.lookup_or_create(center_vertex);
+    {
+      MeshPrimitive *mesh_primitive = corner.second.uv_primitive->primitive;
+      UVPrimitive prim1(mesh_primitive);
+      MeshUVVert *other_uv_vert = mesh_primitive->get_other_uv_vertex(
+          corner.second.edge->vertices[0]->vertex, corner.second.edge->vertices[1]->vertex);
+      center_vertex.loop = other_uv_vert->loop;
+      center_vertex.vertex = other_uv_vert->vertex;
 
-    // What is the mesh primitive of the next
-
-    UVPrimitive prim1(0);
-    UVEdge edge_template;
-    edge_template.vertices[0] = border.verts[vert.index].uv_vertex;
-    edge_template.vertices[1] = border.verts[vert.prev_index].uv_vertex;
-    prim1.edges.append(island.lookup_or_create(edge_template));
-    edge_template.vertices[0] = border.verts[vert.prev_index].uv_vertex;
-    edge_template.vertices[1] = center_vertex_ptr;
-    prim1.edges.append(island.lookup_or_create(edge_template));
-    edge_template.vertices[0] = center_vertex_ptr;
-    edge_template.vertices[1] = border.verts[vert.index].uv_vertex;
-    prim1.edges.append(island.lookup_or_create(edge_template));
-    prim1.append_to_uv_edges();
-    prim1.append_to_uv_vertices();
-    island.uv_primitives.append(prim1);
+      UVVertex *center_vertex_ptr = island.lookup_or_create(center_vertex);
+      UVEdge edge_template;
+      edge_template.vertices[0] = corner.first.get_uv_vertex(1);
+      edge_template.vertices[1] = corner.first.get_uv_vertex(0);
+      prim1.edges.append(island.lookup_or_create(edge_template));
+      edge_template.vertices[0] = corner.first.get_uv_vertex(0);
+      edge_template.vertices[1] = center_vertex_ptr;
+      prim1.edges.append(island.lookup_or_create(edge_template));
+      edge_template.vertices[0] = center_vertex_ptr;
+      edge_template.vertices[1] = corner.first.get_uv_vertex(1);
+      prim1.edges.append(island.lookup_or_create(edge_template));
+      prim1.append_to_uv_edges();
+      prim1.append_to_uv_vertices();
+      island.uv_primitives.append(prim1);
+    }
+    {
+      MeshPrimitive *mesh_primitive = corner.first.uv_primitive->primitive;
+      UVPrimitive prim1(mesh_primitive);
+      MeshUVVert *other_uv_vert = mesh_primitive->get_other_uv_vertex(
+          corner.first.edge->vertices[0]->vertex, corner.first.edge->vertices[1]->vertex);
+      center_vertex.loop = other_uv_vert->loop;
+      center_vertex.vertex = other_uv_vert->vertex;
+      /* TODO: Should be reversed. */
+      UVVertex *center_vertex_ptr = island.lookup_or_create(center_vertex);
+      UVEdge edge_template;
+      edge_template.vertices[0] = corner.second.get_uv_vertex(1);
+      edge_template.vertices[1] = corner.second.get_uv_vertex(0);
+      prim1.edges.append(island.lookup_or_create(edge_template));
+      edge_template.vertices[0] = corner.second.get_uv_vertex(0);
+      edge_template.vertices[1] = center_vertex_ptr;
+      prim1.edges.append(island.lookup_or_create(edge_template));
+      edge_template.vertices[0] = center_vertex_ptr;
+      edge_template.vertices[1] = corner.second.get_uv_vertex(1);
+      prim1.edges.append(island.lookup_or_create(edge_template));
+      prim1.append_to_uv_edges();
+      prim1.append_to_uv_vertices();
+      island.uv_primitives.append(prim1);
+    }
 
 #if 0
     prim1.edges[0].vertices[0].uv = border.verts[vert.index].uv;
@@ -403,29 +400,29 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
   svg(of, *this, step++);
 #endif
 
-  int i = 1;
-  while (i) {
-    int64_t border_index = 0;
-    for (UVBorder &border : borders) {
-      border.update_indexes(border_index++);
-    }
+  int64_t border_index = 0;
+  for (UVBorder &border : borders) {
+    border.update_indexes(border_index++);
+  }
 
-    UVBorderVert *extension_vert = sharpest_border_vert(*this);
-    if (extension_vert == nullptr) {
+  int i = 5;
+  while (i) {
+    std::optional<UVBorderCorner> extension_corner = sharpest_border_corner(*this);
+    if (!extension_corner.has_value()) {
       break;
     }
 
     /* When outside the mask, the uv should not be considered for extension. */
-    if (!mask.is_masked(island_index, extension_vert->uv_vertex->uv)) {
-      extension_vert->flags.extendable = false;
+    if (!mask.is_masked(island_index, extension_corner->second.get_uv_vertex(0)->uv)) {
+      extension_corner->second.flags.extendable = false;
       continue;
     }
 
     // TODO: extend
-    extend_at_vert(*this, *extension_vert, mesh_data);
+    extend_at_vert(*this, *extension_corner, mesh_data);
 
     /* Mark that the vert is extended. Unable to extend twice. */
-    extension_vert->flags.extendable = false;
+    extension_corner->second.flags.extendable = false;
     i--;
 #ifdef DEBUG_SVG
     svg(of, *this, step++);
@@ -442,60 +439,92 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
 /* -------------------------------------------------------------------- */
 /** \name UVBorder
  * \{ */
-void flip_order()
-{
-  // TODO implement.
-}
 
-static const UVBorderVert *previous_vert(const UVBorder &border, const UVBorderVert &vert)
+std::optional<UVBorder> UVBorder::extract_from_edges(Vector<UVBorderEdge> &edges)
 {
-  const UVBorderVert *result = &border.verts.last();
-  for (const UVBorderVert &other : border.verts) {
-    if (other.uv_vertex->uv == vert.uv_vertex->uv) {
-      return result;
+  /* Find a part of the border that haven't been extracted yet. */
+  UVBorderEdge *starting_border_edge = nullptr;
+  for (UVBorderEdge &edge : edges) {
+    if (edge.tag == false) {
+      starting_border_edge = &edge;
+      break;
     }
-    result = &other;
   }
-  BLI_assert_unreachable();
-  return nullptr;
-}
+  if (starting_border_edge == nullptr) {
+    return std::nullopt;
+  }
+  UVBorder border;
+  border.edges.append(*starting_border_edge);
+  starting_border_edge->tag = true;
 
-static const UVBorderVert *next_vert(const UVBorder &border, const UVBorderVert &vert)
-{
-  const UVBorderVert *result = &border.verts.first();
-  // TODO: tried to use reversed_iterator, but wasn't able to solve its compiler issues ATM. will
-  // look at it later on.
-  for (int i = border.verts.size() - 1; i >= 0; i--) {
-    const UVBorderVert &other = border.verts[i];
-    if (other.uv_vertex->uv == vert.uv_vertex->uv) {
-      return result;
+  float2 first_uv = starting_border_edge->get_uv_vertex(0)->uv;
+  float2 current_uv = starting_border_edge->get_uv_vertex(1)->uv;
+  while (current_uv != first_uv) {
+    for (UVBorderEdge &border_edge : edges) {
+      if (border_edge.tag == true) {
+        continue;
+      }
+      int i;
+      for (i = 0; i < 2; i++) {
+        if (border_edge.edge->vertices[i]->uv == current_uv) {
+          border_edge.reverse_order = i == 1;
+          border_edge.tag = true;
+          current_uv = border_edge.get_uv_vertex(1)->uv;
+          border.edges.append(border_edge);
+          break;
+        }
+      }
+      if (i != 2) {
+        break;
+      }
     }
-    result = &other;
   }
-  BLI_assert_unreachable();
-  return nullptr;
+  return border;
 }
 
-float UVBorder::outside_angle(const UVBorderVert &vert) const
+void UVBorder::flip_order()
 {
-  const UVBorderVert &prev = *previous_vert(*this, vert);
-  const UVBorderVert &next = *next_vert(*this, vert);
+  for (UVBorderEdge &edge : edges) {
+    edge.reverse_order = !edge.reverse_order;
+  }
+}
+
+float UVBorder::outside_angle(const UVBorderEdge &edge) const
+{
+  const UVBorderEdge &prev = edges[edge.prev_index];
   // TODO: need detection if the result is inside or outside.
   // return angle_v2v2v2(prev.uv, vert.uv, next.uv);
-  return M_PI - angle_signed_v2v2(vert.uv_vertex->uv - prev.uv_vertex->uv,
-                                  next.uv_vertex->uv - vert.uv_vertex->uv);
+  return M_PI - angle_signed_v2v2(prev.get_uv_vertex(1)->uv - prev.get_uv_vertex(0)->uv,
+                                  edge.get_uv_vertex(1)->uv - edge.get_uv_vertex(0)->uv);
 }
 
 void UVBorder::update_indexes(uint64_t border_index)
 {
-  for (int64_t i = 0; i < verts.size(); i++) {
-    int64_t prev = (i - 1 + verts.size()) % verts.size();
-    int64_t next = (i + 1) % verts.size();
-    verts[i].prev_index = prev;
-    verts[i].index = i;
-    verts[i].next_index = next;
-    verts[i].border_index = border_index;
+  for (int64_t i = 0; i < edges.size(); i++) {
+    int64_t prev = (i - 1 + edges.size()) % edges.size();
+    int64_t next = (i + 1) % edges.size();
+    edges[i].prev_index = prev;
+    edges[i].index = i;
+    edges[i].next_index = next;
+    edges[i].border_index = border_index;
   }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name UVPrimitive
+ * \{ */
+
+UVBorder UVPrimitive::extract_border() const
+{
+  Vector<UVBorderEdge> border_edges;
+  for (UVEdge *edge : edges) {
+    /* TODO remove const cast. only needed for debugging atm. */
+    UVBorderEdge border_edge(edge, const_cast<UVPrimitive *>(this));
+    border_edges.append(border_edge);
+  }
+  return *UVBorder::extract_from_edges(border_edges);
 }
 
 /** \} */
@@ -634,7 +663,7 @@ void svg(std::ostream &ss, const UVEdge &edge)
 void svg(std::ostream &ss, const UVIsland &island, int step)
 {
   ss << "<g transform=\"translate(" << step * 1024 << " 0)\">\n";
-  ss << "  <g fill=\"yellow\">\n";
+  ss << "  <g fill=\"none\">\n";
 
   /* Inner edges */
   ss << "    <g stroke=\"grey\" stroke-width=\"1\">\n";
@@ -751,31 +780,30 @@ void svg_coords(std::ostream &ss, const float2 &coords)
 
 void svg(std::ostream &ss, const UVPrimitive &primitive)
 {
+  const UVBorder border = primitive.extract_border();
   ss << "       <polygon points=\"";
-  for (int i = 0; i < 3; i++) {
-    svg_coords(ss, primitive.edges[i]->vertices[0]->uv);
+  for (const UVBorderEdge &edge : border.edges) {
     ss << " ";
+    svg_coords(ss, edge.get_uv_vertex(0)->uv);
   }
   ss << "\"/>\n";
 
   float2 center(0.0, 0.0);
-  for (int i = 0; i < 3; i++) {
-    for (int j = 0; j < 2; j++) {
-      center += primitive.edges[i]->vertices[j]->uv;
-    }
+  for (const UVBorderEdge &edge : border.edges) {
+    center += edge.get_uv_vertex(0)->uv;
   }
-  center /= 3 * 2;
-  if (primitive.primitive) {
-    ss << "<text x=\"" << center.x * 1024 << "\"";
-    ss << " y=\"" << center.y * 1024 << "\">";
-    ss << primitive.primitive->index;
-  }
+  center /= 3;
+
+  ss << "<text x=\"" << center.x * 1024 << "\"";
+  ss << " y=\"" << center.y * 1024 << "\">";
+  ss << primitive.primitive->index;
+
   ss << "</text>\n";
-  for (int i = 0; i < 3; i++) {
-    float2 co = (center + primitive.edges[i]->vertices[0]->uv) / 2.0;
-    ss << "<text x=\"" << co.x * 1024 << "\"";
-    ss << " y=\"" << co.y * 1024 << "\">";
-    ss << primitive.edges[i]->vertices[0]->vertex->v;
+  for (const UVBorderEdge &edge : border.edges) {
+    float2 co = (center + edge.get_uv_vertex(0)->uv) / 2.0;
+    ss << "<text x=\"" << svg_x(co) << "\"";
+    ss << " y=\"" << svg_y(co) << "\">";
+    ss << edge.get_uv_vertex(0)->vertex->v;
     ss << "</text>\n";
   }
 }
@@ -794,20 +822,19 @@ void svg(std::ostream &ss, const UVBorder &border)
   ss << "<g>\n";
 
   ss << " <g stroke=\"lightgrey\">\n";
-  for (const UVBorderVert &vert : border.verts) {
-    const UVBorderVert &prev = *previous_vert(border, vert);
-    float2 v1 = prev.uv_vertex->uv;
-    float2 v2 = vert.uv_vertex->uv;
+  for (const UVBorderEdge &edge : border.edges) {
+    float2 v1 = edge.get_uv_vertex(0)->uv;
+    float2 v2 = edge.get_uv_vertex(1)->uv;
     ss << "       <line x1=\"" << svg_x(v1) << "\" y1=\"" << svg_y(v1) << "\" x2=\"" << svg_x(v2)
        << "\" y2=\"" << svg_y(v2) << "\"/>\n";
   }
   ss << " </g>\n";
 
   ss << " <g fill=\"red\">\n";
-  for (const UVBorderVert &vert : border.verts) {
-    float2 v1 = vert.uv_vertex->uv;
+  for (const UVBorderEdge &edge : border.edges) {
+    float2 v1 = edge.get_uv_vertex(0)->uv;
     ss << "       <text x=\"" << svg_x(v1) << "\" y=\"" << svg_y(v1) << "\">"
-       << (border.outside_angle(vert) / M_PI * 180) << "</text>\n";
+       << (border.outside_angle(edge) / M_PI * 180) << "</text>\n";
   }
   ss << " </g>\n";
 

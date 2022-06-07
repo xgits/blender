@@ -4,6 +4,7 @@
 #pragma once
 
 #include <fstream>
+#include <optional>
 
 #include "BLI_array.hh"
 #include "BLI_edgehash.h"
@@ -70,6 +71,16 @@ struct MeshPrimitive {
     }
     BLI_assert_unreachable();
     return vertices[0];
+  }
+
+  MeshUVVert *get_other_uv_vertex(const MeshVertex *v1, const MeshVertex *v2)
+  {
+    for (MeshUVVert &uv_vertex : vertices) {
+      if (uv_vertex.vertex != v1 && uv_vertex.vertex != v2) {
+        return &uv_vertex;
+      }
+    }
+    return nullptr;
   }
 };
 
@@ -284,43 +295,51 @@ struct UVPrimitive {
     }
     return false;
   }
-};
 
-struct UVBorderVert {
-  UVVertex *uv_vertex;
-
-  /* Indexes of connected border verts. */
-  int64_t index;
-  int64_t prev_index;
-  int64_t next_index;
-  int64_t border_index;
-
-  struct {
-    /** Should this vertex still be checked when performing extension. */
-    bool extendable : 1;
-  } flags;
-
-  explicit UVBorderVert(UVVertex *uv_vertex) : uv_vertex(uv_vertex)
-  {
-    flags.extendable = true;
-  }
+  UVBorder extract_border() const;
 };
 
 struct UVBorderEdge {
   UVEdge *edge;
   bool tag = false;
   UVPrimitive *uv_primitive;
+  /* Should the vertices of the edge be evaluated in reverse order. */
+  bool reverse_order = false;
+
+  int64_t index = -1;
+  int64_t prev_index = -1;
+  int64_t next_index = -1;
+  int64_t border_index = -1;
+
+  struct {
+    /* Is possible to extend on the `get_uv_vertex(0)` */
+    bool extendable : 1;
+  } flags;
 
   explicit UVBorderEdge(UVEdge *edge, UVPrimitive *uv_primitive)
       : edge(edge), uv_primitive(uv_primitive)
   {
+    flags.extendable = true;
+  }
+
+  UVVertex *get_uv_vertex(int index)
+  {
+    int actual_index = reverse_order ? 1 - index : index;
+    return edge->vertices[actual_index];
+  }
+  const UVVertex *get_uv_vertex(int index) const
+  {
+    int actual_index = reverse_order ? 1 - index : index;
+    return edge->vertices[actual_index];
   }
 };
+
+using UVBorderCorner = std::pair<UVBorderEdge &, UVBorderEdge &>;
 
 struct UVBorder {
   /** Ordered list of UV Verts of the border of this island. */
   // TODO: support multiple rings + order (CW, CCW)
-  Vector<UVBorderVert> verts;
+  Vector<UVBorderEdge> edges;
 
   /**
    * Flip the order of the verts, changing the order between CW and CCW.
@@ -330,9 +349,11 @@ struct UVBorder {
   /**
    * Calculate the outside angle of the given vert.
    */
-  float outside_angle(const UVBorderVert &vert) const;
+  float outside_angle(const UVBorderEdge &vert) const;
 
   void update_indexes(uint64_t border_index);
+
+  static std::optional<UVBorder> extract_from_edges(Vector<UVBorderEdge> &edges);
 };
 
 struct UVIsland {
@@ -340,8 +361,8 @@ struct UVIsland {
   Vector<UVEdge> uv_edges;
   Vector<UVPrimitive> uv_primitives;
   /**
-   * List of borders of this island. There can be multiple borders per island as a border could be
-   * completely encapsulated by another one.
+   * List of borders of this island. There can be multiple borders per island as a border could
+   * be completely encapsulated by another one.
    */
   Vector<UVBorder> borders;
 
@@ -400,7 +421,7 @@ struct UVIsland {
   }
 
   /** Initialize the border attribute. */
-  void extract_border();
+  void extract_borders();
   /** Iterative extend border to fit the mask. */
   void extend_border(const UVIslandsMask &mask,
                      const short island_index,
@@ -504,8 +525,24 @@ struct UVIslands {
   void extract_borders()
   {
     for (UVIsland &island : islands) {
-      island.extract_border();
+      island.extract_borders();
     }
+
+#ifdef DEBUG_SVG
+    std::ofstream of;
+    of.open("/tmp/borders.svg");
+    svg_header(of);
+    for (UVIsland &island : islands) {
+      int index = 0;
+      for (UVBorder &border : island.borders) {
+        border.update_indexes(index);
+        index++;
+        svg(of, border);
+      }
+    }
+    svg_footer(of);
+    of.close();
+#endif
   }
 
   void extend_borders(const UVIslandsMask &islands_mask, const MeshData &mesh_data)

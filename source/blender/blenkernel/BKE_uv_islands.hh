@@ -262,10 +262,7 @@ struct UVPrimitive {
 };
 
 struct UVBorderVert {
-  float2 uv;
-
-  /* Index of this vert in the vertices of the original mesh. */
-  MeshVertex *vertex;
+  UVVertex *uv_vertex;
 
   /* Indexes of connected border verts. */
   int64_t index;
@@ -273,15 +270,12 @@ struct UVBorderVert {
   int64_t next_index;
   int64_t border_index;
 
-  /** Index of the uv primitive (UVIsland) */
-  int64_t uv_primitive_index;
-
   struct {
     /** Should this vertex still be checked when performing extension. */
     bool extendable : 1;
   } flags;
 
-  explicit UVBorderVert(float2 &uv, MeshVertex *vertex) : uv(uv), vertex(vertex)
+  explicit UVBorderVert(UVVertex *uv_vertex) : uv_vertex(uv_vertex)
   {
     flags.extendable = true;
   }

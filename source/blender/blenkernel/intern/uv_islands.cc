@@ -37,8 +37,8 @@ void UVIsland::extract_border()
     starting_border_edge->tag = true;
     float2 first_uv = starting_border_edge->edge->vertices[0]->uv;
     float2 current_uv = starting_border_edge->edge->vertices[1]->uv;
-    MeshVertex *current_vert = starting_border_edge->edge->vertices[1]->vertex;
-    border.verts.append(UVBorderVert(first_uv, starting_border_edge->edge->vertices[0]->vertex));
+    UVVertex *current_vert = starting_border_edge->edge->vertices[1];
+    border.verts.append(UVBorderVert(starting_border_edge->edge->vertices[0]));
     while (current_uv != first_uv) {
       for (UVBorderEdge &border_edge : edges) {
         if (border_edge.tag == true) {
@@ -47,9 +47,9 @@ void UVIsland::extract_border()
         int i;
         for (i = 0; i < 2; i++) {
           if (border_edge.edge->vertices[i]->uv == current_uv) {
-            border.verts.append(UVBorderVert(current_uv, current_vert));
+            border.verts.append(UVBorderVert(current_vert));
             current_uv = border_edge.edge->vertices[1 - i]->uv;
-            current_vert = border_edge.edge->vertices[1 - i]->vertex;
+            current_vert = border_edge.edge->vertices[1 - i];
             border_edge.tag = true;
             break;
           }
@@ -95,7 +95,7 @@ static UVBorderVert *sharpest_border_vert(UVIsland &island)
   return result;
 }
 
-struct FanTri {
+struct FanSegment {
   MeshPrimitive *primitive;
   /* UVs order are already applied. So uvs[0] mathes primitive->vertices[vert_order[0]]/ */
   float2 uvs[3];
@@ -106,7 +106,7 @@ struct FanTri {
     bool should_be_added : 1;
   } flags;
 
-  FanTri(MeshPrimitive *primitive, MeshVertex *vertex) : primitive(primitive)
+  FanSegment(MeshPrimitive *primitive, MeshVertex *vertex) : primitive(primitive)
   {
     flags.found = false;
     flags.should_be_added = false;
@@ -133,7 +133,7 @@ struct FanTri {
 
 struct Fan {
   /* Blades of the fan. */
-  Vector<FanTri> segments;
+  Vector<FanSegment> segments;
 
   Fan(MeshVertex &vertex)
   {
@@ -154,7 +154,7 @@ struct Fan {
           if (edge == current_edge || (edge->vert1 != &vertex && edge->vert2 != &vertex)) {
             continue;
           }
-          segments.append(FanTri(other, &vertex));
+          segments.append(FanSegment(other, &vertex));
           current_edge = edge;
           previous_primitive = other;
           stop = true;
@@ -170,7 +170,7 @@ struct Fan {
 
   void init_uv_coordinates(UVBorderVert &vert, const UVIsland &island)
   {
-    for (FanTri &segment : segments) {
+    for (FanSegment &segment : segments) {
       int2 test_edge = int2(segment.primitive->vertices[segment.vert_order[0]].vertex->v,
                             segment.primitive->vertices[segment.vert_order[1]].vertex->v);
       for (const UVPrimitive &uv_primitive : island.uv_primitives) {
@@ -178,9 +178,9 @@ struct Fan {
           int2 o(edge->vertices[0]->vertex->v, edge->vertices[1]->vertex->v);
           if ((test_edge.x == o.x && test_edge.y == o.y) ||
               (test_edge.x == o.y && test_edge.y == o.x)) {
-            segment.uvs[0] = vert.uv;
+            segment.uvs[0] = vert.uv_vertex->uv;
             for (int i = 0; i < 2; i++) {
-              if (edge->vertices[i]->uv == vert.uv) {
+              if (edge->vertices[i]->uv == vert.uv_vertex->uv) {
                 segment.uvs[1] = edge->vertices[1 - i]->uv;
                 break;
               }
@@ -199,7 +199,7 @@ struct Fan {
 
 static void print(const Fan &fan)
 {
-  for (const FanTri &segment : fan.segments) {
+  for (const FanSegment &segment : fan.segments) {
     for (int i = 0; i < 3; i++) {
       int vert_index = segment.vert_order[i];
       printf("%lld(%f,%f) ",
@@ -213,7 +213,7 @@ static void print(const Fan &fan)
 
 static void extend_at_vert(UVIsland &island, UVBorderVert &vert, const MeshData &mesh_data)
 {
-  Fan fan(*vert.vertex);
+  Fan fan(*vert.uv_vertex->vertex);
   print(fan);
   fan.init_uv_coordinates(vert, island);
   print(fan);
@@ -368,7 +368,7 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
     }
 
     /* When outside the mask, the uv should not be considered for extension. */
-    if (!mask.is_masked(island_index, extension_vert->uv)) {
+    if (!mask.is_masked(island_index, extension_vert->uv_vertex->uv)) {
       extension_vert->flags.extendable = false;
       continue;
     }
@@ -403,7 +403,7 @@ static const UVBorderVert *previous_vert(const UVBorder &border, const UVBorderV
 {
   const UVBorderVert *result = &border.verts.last();
   for (const UVBorderVert &other : border.verts) {
-    if (other.uv == vert.uv) {
+    if (other.uv_vertex->uv == vert.uv_vertex->uv) {
       return result;
     }
     result = &other;
@@ -419,7 +419,7 @@ static const UVBorderVert *next_vert(const UVBorder &border, const UVBorderVert 
   // look at it later on.
   for (int i = border.verts.size() - 1; i >= 0; i--) {
     const UVBorderVert &other = border.verts[i];
-    if (other.uv == vert.uv) {
+    if (other.uv_vertex->uv == vert.uv_vertex->uv) {
       return result;
     }
     result = &other;
@@ -434,7 +434,8 @@ float UVBorder::outside_angle(const UVBorderVert &vert) const
   const UVBorderVert &next = *next_vert(*this, vert);
   // TODO: need detection if the result is inside or outside.
   // return angle_v2v2v2(prev.uv, vert.uv, next.uv);
-  return M_PI - angle_signed_v2v2(vert.uv - prev.uv, next.uv - vert.uv);
+  return M_PI - angle_signed_v2v2(vert.uv_vertex->uv - prev.uv_vertex->uv,
+                                  next.uv_vertex->uv - vert.uv_vertex->uv);
 }
 
 void UVBorder::update_indexes(uint64_t border_index)
@@ -745,17 +746,17 @@ void svg(std::ostream &ss, const UVBorder &border)
   ss << " <g stroke=\"lightgrey\">\n";
   for (const UVBorderVert &vert : border.verts) {
     const UVBorderVert &prev = *previous_vert(border, vert);
-    float2 v1 = prev.uv * float2(1024, 1024);
-    float2 v2 = vert.uv * float2(1024, 1024);
-    ss << "       <line x1=\"" << v1.x << "\" y1=\"" << v1.y << "\" x2=\"" << v2.x << "\" y2=\""
-       << v2.y << "\"/>\n";
+    float2 v1 = prev.uv_vertex->uv;
+    float2 v2 = vert.uv_vertex->uv;
+    ss << "       <line x1=\"" << svg_x(v1) << "\" y1=\"" << svg_y(v1) << "\" x2=\"" << svg_x(v2)
+       << "\" y2=\"" << svg_y(v2) << "\"/>\n";
   }
   ss << " </g>\n";
 
   ss << " <g fill=\"red\">\n";
   for (const UVBorderVert &vert : border.verts) {
-    float2 v1 = vert.uv * float2(1024, 1024);
-    ss << "       <text x=\"" << v1.x << "\" y=\"" << v1.y << "\">"
+    float2 v1 = vert.uv_vertex->uv;
+    ss << "       <text x=\"" << svg_x(v1) << "\" y=\"" << svg_y(v1) << "\">"
        << (border.outside_angle(vert) / M_PI * 180) << "</text>\n";
   }
   ss << " </g>\n";

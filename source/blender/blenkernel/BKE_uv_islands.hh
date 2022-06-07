@@ -183,19 +183,24 @@ struct UVVertex {
 };
 
 struct UVEdge {
-  UVVertex vertices[2];
+  std::array<UVVertex *, 2> vertices;
   Vector<UVPrimitive *, 2> uv_primitives;
-
-  bool has_shared_edge(const UVEdge &other) const
-  {
-    return (vertices[0].uv == other.vertices[0].uv && vertices[1].uv == other.vertices[1].uv) ||
-           (vertices[0].uv == other.vertices[1].uv && vertices[1].uv == other.vertices[0].uv);
-  }
 
   bool has_shared_edge(const MeshUVVert &v1, const MeshUVVert &v2) const
   {
-    return (vertices[0].uv == v1.uv && vertices[1].uv == v2.uv) ||
-           (vertices[0].uv == v2.uv && vertices[1].uv == v1.uv);
+    return (vertices[0]->uv == v1.uv && vertices[1]->uv == v2.uv) ||
+           (vertices[0]->uv == v2.uv && vertices[1]->uv == v1.uv);
+  }
+
+  bool has_shared_edge(const UVVertex &v1, const UVVertex &v2) const
+  {
+    return (vertices[0]->uv == v1.uv && vertices[1]->uv == v2.uv) ||
+           (vertices[0]->uv == v2.uv && vertices[1]->uv == v1.uv);
+  }
+
+  bool has_shared_edge(const UVEdge &other) const
+  {
+    return has_shared_edge(*other.vertices[0], *other.vertices[1]);
   }
 
   bool is_border_edge() const
@@ -337,13 +342,26 @@ struct UVIsland {
       const MeshUVVert &v1 = primitive.get_uv_vert(edge->vert1);
       const MeshUVVert &v2 = primitive.get_uv_vert(edge->vert2);
       UVEdge uv_edge_template;
-      uv_edge_template.vertices[0] = UVVertex(v1);
-      uv_edge_template.vertices[1] = UVVertex(v2);
+      uv_edge_template.vertices[0] = lookup_or_create(UVVertex(v1));
+      uv_edge_template.vertices[1] = lookup_or_create(UVVertex(v2));
       UVEdge *uv_edge = lookup_or_create(uv_edge_template);
       uv_primitive_ptr->edges.append(uv_edge);
       uv_edge->uv_primitives.append(uv_primitive_ptr);
     }
     return uv_primitive_ptr;
+  }
+
+  UVVertex *lookup_or_create(const UVVertex &vertex)
+  {
+    for (UVVertex &uv_vertex : uv_vertices) {
+      if (uv_vertex.uv == vertex.uv && uv_vertex.vertex == vertex.vertex) {
+        return &uv_vertex;
+      }
+    }
+
+    uv_vertices.append(vertex);
+    UVVertex *result = &uv_vertices.last();
+    return result;
   }
 
   UVEdge *lookup_or_create(const UVEdge &edge)
@@ -373,7 +391,11 @@ struct UVIsland {
     uv_primitives.append(primitive);
     UVPrimitive *new_prim_ptr = &uv_primitives.last();
     for (int i = 0; i < 3; i++) {
-      new_prim_ptr->edges[i] = lookup_or_create(*new_prim_ptr->edges[i]);
+      UVEdge *other_edge = primitive.edges[i];
+      UVEdge uv_edge_template;
+      uv_edge_template.vertices[0] = lookup_or_create(*other_edge->vertices[0]);
+      uv_edge_template.vertices[1] = lookup_or_create(*other_edge->vertices[1]);
+      new_prim_ptr->edges[i] = lookup_or_create(uv_edge_template);
       new_prim_ptr->edges[i]->uv_primitives.append(new_prim_ptr);
     }
   }
@@ -586,7 +608,7 @@ struct UVIslandsMask {
     float2 p;
     for (int i = 0; i < 10; i++) {
       float f = i / 10.0f;
-      interp_v2_v2v2(p, edge.vertices[0].uv, edge.vertices[1].uv, f);
+      interp_v2_v2v2(p, edge.vertices[0]->uv, edge.vertices[1]->uv, f);
       add(island_index, p);
     }
   }

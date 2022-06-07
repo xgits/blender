@@ -35,10 +35,10 @@ void UVIsland::extract_border()
     }
 
     starting_border_edge->tag = true;
-    float2 first_uv = starting_border_edge->edge->vertices[0].uv;
-    float2 current_uv = starting_border_edge->edge->vertices[1].uv;
-    MeshVertex *current_vert = starting_border_edge->edge->vertices[1].vertex;
-    border.verts.append(UVBorderVert(first_uv, starting_border_edge->edge->vertices[0].vertex));
+    float2 first_uv = starting_border_edge->edge->vertices[0]->uv;
+    float2 current_uv = starting_border_edge->edge->vertices[1]->uv;
+    MeshVertex *current_vert = starting_border_edge->edge->vertices[1]->vertex;
+    border.verts.append(UVBorderVert(first_uv, starting_border_edge->edge->vertices[0]->vertex));
     while (current_uv != first_uv) {
       for (UVBorderEdge &border_edge : edges) {
         if (border_edge.tag == true) {
@@ -46,10 +46,10 @@ void UVIsland::extract_border()
         }
         int i;
         for (i = 0; i < 2; i++) {
-          if (border_edge.edge->vertices[i].uv == current_uv) {
+          if (border_edge.edge->vertices[i]->uv == current_uv) {
             border.verts.append(UVBorderVert(current_uv, current_vert));
-            current_uv = border_edge.edge->vertices[1 - i].uv;
-            current_vert = border_edge.edge->vertices[1 - i].vertex;
+            current_uv = border_edge.edge->vertices[1 - i]->uv;
+            current_vert = border_edge.edge->vertices[1 - i]->vertex;
             border_edge.tag = true;
             break;
           }
@@ -175,13 +175,13 @@ struct Fan {
                             segment.primitive->vertices[segment.vert_order[1]].vertex->v);
       for (const UVPrimitive &uv_primitive : island.uv_primitives) {
         for (UVEdge *edge : uv_primitive.edges) {
-          int2 o(edge->vertices[0].vertex->v, edge->vertices[1].vertex->v);
+          int2 o(edge->vertices[0]->vertex->v, edge->vertices[1]->vertex->v);
           if ((test_edge.x == o.x && test_edge.y == o.y) ||
               (test_edge.x == o.y && test_edge.y == o.x)) {
             segment.uvs[0] = vert.uv;
             for (int i = 0; i < 2; i++) {
-              if (edge->vertices[i].uv == vert.uv) {
-                segment.uvs[1] = edge->vertices[1 - i].uv;
+              if (edge->vertices[i]->uv == vert.uv) {
+                segment.uvs[1] = edge->vertices[1 - i]->uv;
                 break;
               }
             }
@@ -546,6 +546,25 @@ bool UVIslandsMask::is_masked(const short island_index, const float2 uv) const
  *
  * Debugging functions to export UV islands to SVG files.
  * \{ */
+static float svg_x(const float2 &uv)
+{
+  return uv.x * 1024;
+}
+
+static float svg_y(const float2 &uv)
+{
+  return uv.y * 1024;
+}
+
+static float svg_x(const UVVertex &vertex)
+{
+  return svg_x(vertex.uv);
+}
+
+static float svg_y(const UVVertex &vertex)
+{
+  return svg_y(vertex.uv);
+}
 
 void svg_header(std::ostream &ss)
 {
@@ -558,9 +577,9 @@ void svg_footer(std::ostream &ss)
 }
 void svg(std::ostream &ss, const UVEdge &edge)
 {
-  ss << "       <line x1=\"" << edge.vertices[0].uv.x * 1024 << "\" y1=\""
-     << edge.vertices[0].uv.y * 1024 << "\" x2=\"" << edge.vertices[1].uv.x * 1024 << "\" y2=\""
-     << edge.vertices[1].uv.y * 1024 << "\"/>\n";
+  ss << "       <line x1=\"" << svg_x(*edge.vertices[0]) << "\" y1=\"" << svg_y(*edge.vertices[0])
+     << "\" x2=\"" << svg_x(*edge.vertices[1]) << "\" y2=\"" << svg_y(*edge.vertices[1])
+     << "\"/>\n";
 }
 
 void svg(std::ostream &ss, const UVIsland &island, int step)
@@ -685,7 +704,7 @@ void svg(std::ostream &ss, const UVPrimitive &primitive)
 {
   ss << "       <polygon points=\"";
   for (int i = 0; i < 3; i++) {
-    svg_coords(ss, primitive.edges[i]->vertices[0].uv);
+    svg_coords(ss, primitive.edges[i]->vertices[0]->uv);
     ss << " ";
   }
   ss << "\"/>\n";
@@ -693,7 +712,7 @@ void svg(std::ostream &ss, const UVPrimitive &primitive)
   float2 center(0.0, 0.0);
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 2; j++) {
-      center += primitive.edges[i]->vertices[j].uv;
+      center += primitive.edges[i]->vertices[j]->uv;
     }
   }
   center /= 3 * 2;
@@ -702,10 +721,10 @@ void svg(std::ostream &ss, const UVPrimitive &primitive)
   ss << primitive.primitive->index;
   ss << "</text>\n";
   for (int i = 0; i < 3; i++) {
-    float2 co = (center + primitive.edges[i]->vertices[0].uv) / 2.0;
+    float2 co = (center + primitive.edges[i]->vertices[0]->uv) / 2.0;
     ss << "<text x=\"" << co.x * 1024 << "\"";
     ss << " y=\"" << co.y * 1024 << "\">";
-    ss << primitive.edges[i]->vertices[0].vertex->v;
+    ss << primitive.edges[i]->vertices[0]->vertex->v;
     ss << "</text>\n";
   }
 }

@@ -334,7 +334,7 @@ struct UVBorderEdge {
   }
 };
 
-using UVBorderCorner = std::pair<UVBorderEdge &, UVBorderEdge &>;
+using UVBorderCorner = std::pair<UVBorderEdge *, UVBorderEdge *>;
 
 struct UVBorder {
   /** Ordered list of UV Verts of the border of this island. */

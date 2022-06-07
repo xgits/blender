@@ -31,6 +31,8 @@ struct MeshPrimitive;
 struct UVPrimitive;
 struct UVPrimitiveEdge;
 struct UVBorder;
+struct UVVertex;
+struct UVEdge;
 
 struct MeshEdge;
 struct MeshPrimitive;
@@ -56,8 +58,8 @@ struct MeshEdge {
 struct MeshPrimitive {
   int64_t index;
   int64_t poly;
-  Vector<MeshEdge *> edges;
-  Vector<MeshUVVert> vertices;
+  Vector<MeshEdge *, 3> edges;
+  Vector<MeshUVVert, 3> vertices;
 
   const MeshUVVert &get_uv_vert(const MeshVertex *vert)
   {
@@ -173,6 +175,9 @@ struct UVVertex {
   /* Position in uv space. */
   float2 uv;
 
+  /* uv edges that are connected to this uvvertex. */
+  Vector<UVEdge *> uv_edges;
+
   explicit UVVertex()
   {
   }
@@ -207,6 +212,13 @@ struct UVEdge {
   {
     return uv_primitives.size() == 1;
   }
+
+  void append_to_uv_vertices()
+  {
+    for (UVVertex *vertex : vertices) {
+      vertex->uv_edges.append_non_duplicates(this);
+    }
+  }
 };
 
 struct UVPrimitive {
@@ -218,6 +230,19 @@ struct UVPrimitive {
 
   explicit UVPrimitive(MeshPrimitive *primitive) : primitive(primitive)
   {
+  }
+
+  void append_to_uv_edges()
+  {
+    for (UVEdge *uv_edge : edges) {
+      uv_edge->uv_primitives.append_non_duplicates(this);
+    }
+  }
+  void append_to_uv_vertices()
+  {
+    for (UVEdge *uv_edge : edges) {
+      uv_edge->append_to_uv_vertices();
+    }
   }
 
   Vector<std::pair<UVEdge *, UVEdge *>> shared_edges(UVPrimitive &other)
@@ -284,10 +309,10 @@ struct UVBorderVert {
 struct UVBorderEdge {
   UVEdge *edge;
   bool tag = false;
-  int64_t uv_prim_index;
+  UVPrimitive *uv_primitive;
 
-  explicit UVBorderEdge(UVEdge *edge, int64_t uv_prim_index)
-      : edge(edge), uv_prim_index(uv_prim_index)
+  explicit UVBorderEdge(UVEdge *edge, UVPrimitive *uv_primitive)
+      : edge(edge), uv_primitive(uv_primitive)
   {
   }
 };
@@ -340,6 +365,7 @@ struct UVIsland {
       uv_edge_template.vertices[1] = lookup_or_create(UVVertex(v2));
       UVEdge *uv_edge = lookup_or_create(uv_edge_template);
       uv_primitive_ptr->edges.append(uv_edge);
+      uv_edge->append_to_uv_vertices();
       uv_edge->uv_primitives.append(uv_primitive_ptr);
     }
     return uv_primitive_ptr;
@@ -355,6 +381,7 @@ struct UVIsland {
 
     uv_vertices.append(vertex);
     UVVertex *result = &uv_vertices.last();
+    result->uv_edges.clear();
     return result;
   }
 
@@ -390,6 +417,7 @@ struct UVIsland {
       uv_edge_template.vertices[0] = lookup_or_create(*other_edge->vertices[0]);
       uv_edge_template.vertices[1] = lookup_or_create(*other_edge->vertices[1]);
       new_prim_ptr->edges[i] = lookup_or_create(uv_edge_template);
+      new_prim_ptr->edges[i]->append_to_uv_vertices();
       new_prim_ptr->edges[i]->uv_primitives.append(new_prim_ptr);
     }
   }

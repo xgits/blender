@@ -15,7 +15,7 @@ void UVIsland::extract_border()
     UVPrimitive &prim = uv_primitives[prim_index];
     for (UVEdge *edge : prim.edges) {
       if (edge->is_border_edge()) {
-        edges.append(UVBorderEdge(edge, prim_index));
+        edges.append(UVBorderEdge(edge, &prim));
       }
     }
   }
@@ -218,35 +218,83 @@ static void extend_at_vert(UVIsland &island, UVBorderVert &vert, const MeshData 
   fan.init_uv_coordinates(vert, island);
   print(fan);
 
-#if 0
-  // add all verts that arent connected to the given border vert to the UVIsland.
-  for (FanTri &tri : fan.tris) {
-    tri.flags.found = false;
-    int2 test_edge(tri.v[0], tri.v[1]);
-    for (UVPrimitive &prim : island.uv_primitives) {
-      for (UVEdge &edge : prim.edges) {
-        if (edge.vertices[0].uv == vert.uv || edge.vertices[1].uv == vert.uv) {
-          int2 o(mesh_data.mloop[edge.vertices[0].loop].v,
-                 mesh_data.mloop[edge.vertices[1].loop].v);
-          if ((test_edge.x == o.x && test_edge.y == o.y) ||
-              (test_edge.x == o.y && test_edge.y == o.x)) {
-            tri.flags.found = true;
-          }
-        }
+  for (FanSegment &segment : fan.segments) {
+    segment.flags.found = false;
+    MeshVertex *v0 = segment.primitive->vertices[segment.vert_order[0]].vertex;
+    MeshVertex *v1 = segment.primitive->vertices[segment.vert_order[1]].vertex;
+    for (UVEdge *edge : vert.uv_vertex->uv_edges) {
+      if ((edge->vertices[0]->vertex == v0 && edge->vertices[1]->vertex == v1) ||
+          (edge->vertices[0]->vertex == v1 && edge->vertices[1]->vertex == v0)) {
+        segment.flags.found = true;
+        break;
       }
     }
   }
   print(fan);
+
   // tag them as being 'not fixed in uv space'. count them and determine a position in uv space.
   // add UV primitives for them.
   // recalc the border.
   int num_to_add = 0;
-  for (FanTri &tri : fan.tris) {
-    if (!tri.flags.found) {
+  for (FanSegment &segment : fan.segments) {
+    if (!segment.flags.found) {
       num_to_add++;
     }
   }
   printf("Found %d new edges to add\n", num_to_add);
+
+  if (num_to_add == 0) {
+    // no new triangles found. In this case we should extend the exising borders.
+    UVBorder &border = island.borders[vert.border_index];
+
+    UVVertex center_vertex;
+    center_vertex.loop = border.verts[vert.next_index].uv_vertex->loop;
+    center_vertex.uv = (border.verts[vert.next_index].uv_vertex->uv +
+                        border.verts[vert.prev_index].uv_vertex->uv) /
+                       2.0f;
+    center_vertex.vertex = border.verts[vert.next_index].uv_vertex->vertex;
+    center_vertex.uv_edges.clear();
+    UVVertex *center_vertex_ptr = island.lookup_or_create(center_vertex);
+
+    // What is the mesh primitive of the next
+
+    UVPrimitive prim1(0);
+    UVEdge edge_template;
+    edge_template.vertices[0] = border.verts[vert.index].uv_vertex;
+    edge_template.vertices[1] = border.verts[vert.prev_index].uv_vertex;
+    prim1.edges.append(island.lookup_or_create(edge_template));
+    edge_template.vertices[0] = border.verts[vert.prev_index].uv_vertex;
+    edge_template.vertices[1] = center_vertex_ptr;
+    prim1.edges.append(island.lookup_or_create(edge_template));
+    edge_template.vertices[0] = center_vertex_ptr;
+    edge_template.vertices[1] = border.verts[vert.index].uv_vertex;
+    prim1.edges.append(island.lookup_or_create(edge_template));
+    prim1.append_to_uv_edges();
+    prim1.append_to_uv_vertices();
+    island.uv_primitives.append(prim1);
+
+#if 0
+    prim1.edges[0].vertices[0].uv = border.verts[vert.index].uv;
+    prim1.edges[0].vertices[1].uv = border.verts[vert.prev_index].uv;
+    prim1.edges[1].vertices[0].uv = border.verts[vert.prev_index].uv;
+    prim1.edges[1].vertices[1].uv = center_uv;
+    prim1.edges[2].vertices[0].uv = center_uv;
+    prim1.edges[2].vertices[1].uv = border.verts[vert.index].uv;
+    island.uv_primitives.append(prim1);
+
+    UVPrimitive prim2(0);
+    prim2.edges[0].vertices[0].uv = border.verts[vert.index].uv;
+    prim2.edges[0].vertices[1].uv = center_uv;
+    prim2.edges[1].vertices[0].uv = center_uv;
+    prim2.edges[1].vertices[1].uv = border.verts[vert.next_index].uv;
+    prim2.edges[2].vertices[0].uv = border.verts[vert.next_index].uv;
+    prim2.edges[2].vertices[1].uv = border.verts[vert.index].uv;
+    island.uv_primitives.append(prim2);
+#endif
+  }
+  else {
+  }
+#if 0
 
   if (num_to_add > 0) {
     UVBorder &border = island.borders[vert.border_index];
@@ -355,7 +403,7 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
   svg(of, *this, step++);
 #endif
 
-  int i = 5;
+  int i = 1;
   while (i) {
     int64_t border_index = 0;
     for (UVBorder &border : borders) {
@@ -717,9 +765,11 @@ void svg(std::ostream &ss, const UVPrimitive &primitive)
     }
   }
   center /= 3 * 2;
-  ss << "<text x=\"" << center.x * 1024 << "\"";
-  ss << " y=\"" << center.y * 1024 << "\">";
-  ss << primitive.primitive->index;
+  if (primitive.primitive) {
+    ss << "<text x=\"" << center.x * 1024 << "\"";
+    ss << " y=\"" << center.y * 1024 << "\">";
+    ss << primitive.primitive->index;
+  }
   ss << "</text>\n";
   for (int i = 0; i < 3; i++) {
     float2 co = (center + primitive.edges[i]->vertices[0]->uv) / 2.0;

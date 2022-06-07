@@ -578,6 +578,16 @@ set(IGC_LLVM_HASH 53a0719f3f4b0388013cfffd7b10c7d5682eece1929a9553c722348d1f866e
 set(IGC_LLVM_HASH_TYPE SHA256)
 set(IGC_LLVM_FILE ${IGC_LLVM_VERSION}.tar.gz)
 
+# WARNING WARNING WARNING
+#
+# IGC_OPENCL_CLANG contains patches for some of its dependencies.
+#
+# Whenever IGC_OPENCL_CLANG_VERSION changes, one *MUST* inspect
+# IGC_OPENCL_CLANG's patches folder and update igc.cmake to account for
+# any added or removed patches.
+#
+# WARNING WARNING WARNING
+
 set(IGC_OPENCL_CLANG_VERSION bbdd1587f577397a105c900be114b56755d1f7dc)
 set(IGC_OPENCL_CLANG_URI https://github.com/intel/opencl-clang/archive/${IGC_OPENCL_CLANG_VERSION}.tar.gz)
 set(IGC_OPENCL_CLANG_HASH d08315f1b0d8a6fef33de2b3e6aa7356534c324910634962c72523d970773efc)

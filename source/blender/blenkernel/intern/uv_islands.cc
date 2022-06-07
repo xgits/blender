@@ -216,8 +216,7 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
   printf("Found %d new edges to add\n", num_to_add);
 
   if (num_to_add == 0) {
-    float2 center_uv = (corner.first->get_uv_vertex(0)->uv + corner.second->get_uv_vertex(1)->uv) /
-                       2.0f;
+    float2 center_uv = corner.uv(0.5f);
     // no new triangles found. In this case we should extend the existing borders.
     UVVertex center_vertex;
     center_vertex.loop = uv_vertex->loop;

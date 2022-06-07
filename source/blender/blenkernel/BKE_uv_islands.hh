@@ -332,9 +332,34 @@ struct UVBorderEdge {
     int actual_index = reverse_order ? 1 - index : index;
     return edge->vertices[actual_index];
   }
+
+  float length() const
+  {
+    return len_v2v2(edge->vertices[0]->uv, edge->vertices[1]->uv);
+  }
 };
 
-using UVBorderCorner = std::pair<UVBorderEdge *, UVBorderEdge *>;
+struct UVBorderCorner {
+  UVBorderEdge *first;
+  UVBorderEdge *second;
+
+  UVBorderCorner(UVBorderEdge *first, UVBorderEdge *second) : first(first), second(second)
+  {
+  }
+
+  float2 uv(float factor)
+  {
+    float2 linear;
+    interp_v2_v2v2(linear, first->get_uv_vertex(0)->uv, second->get_uv_vertex(1)->uv, factor);
+    float2 origin = second->get_uv_vertex(0)->uv;
+    float desired_len = second->length() * factor + first->length() * (1.0 - factor);
+
+    float2 dir = linear - origin;
+    normalize_v2(dir);
+
+    return origin + dir * desired_len;
+  }
+};
 
 struct UVBorder {
   /** Ordered list of UV Verts of the border of this island. */

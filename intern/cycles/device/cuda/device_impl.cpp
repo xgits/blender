@@ -457,6 +457,8 @@ void CUDADevice::reserve_local_memory(const uint kernel_features)
     /* Use the biggest kernel for estimation. */
     const DeviceKernel test_kernel = (kernel_features & KERNEL_FEATURE_NODE_RAYTRACE) ?
                                          DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE :
+                                     (kernel_features & KERNEL_FEATURE_MNEE) ?
+                                         DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_MNEE :
                                          DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE;
 
     /* Launch kernel, using just 1 block appears sufficient to reserve memory for all
@@ -1084,7 +1086,9 @@ void CUDADevice::tex_alloc(device_texture &mem)
   need_texture_info = true;
 
   if (mem.info.data_type != IMAGE_DATA_TYPE_NANOVDB_FLOAT &&
-      mem.info.data_type != IMAGE_DATA_TYPE_NANOVDB_FLOAT3) {
+      mem.info.data_type != IMAGE_DATA_TYPE_NANOVDB_FLOAT3 &&
+      mem.info.data_type != IMAGE_DATA_TYPE_NANOVDB_FPN &&
+      mem.info.data_type != IMAGE_DATA_TYPE_NANOVDB_FP16) {
     CUDA_RESOURCE_DESC resDesc;
     memset(&resDesc, 0, sizeof(resDesc));
 

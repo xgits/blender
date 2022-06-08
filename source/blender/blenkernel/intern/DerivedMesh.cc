@@ -628,14 +628,14 @@ static void mesh_calc_modifier_final_normals(const Mesh *mesh_input,
       /* without this, drawing ngon tri's faces will show ugly tessellated face
        * normals and will also have to calculate normals on the fly, try avoid
        * this where possible since calculating polygon normals isn't fast,
-       * note that this isn't a problem for subsurf (only quads) or editmode
+       * note that this isn't a problem for subsurf (only quads) or edit-mode
        * which deals with drawing differently. */
       BKE_mesh_ensure_normals_for_display(mesh_final);
     }
 
     /* Some modifiers, like data-transfer, may generate those data as temp layer,
      * we do not want to keep them, as they are used by display code when available
-     * (i.e. even if autosmooth is disabled). */
+     * (i.e. even if auto-smooth is disabled). */
     if (CustomData_has_layer(&mesh_final->ldata, CD_NORMAL)) {
       CustomData_free_layers(&mesh_final->ldata, CD_NORMAL, mesh_final->totloop);
     }
@@ -1164,6 +1164,10 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
   if (mesh_orco_cloth) {
     BKE_id_free(nullptr, mesh_orco_cloth);
   }
+
+  /* Remove temporary data layer only needed for modifier evaluation.
+   * Save some memory, and ensure GPU subdivision does not need to deal with this. */
+  CustomData_free_layers(&mesh_final->vdata, CD_CLOTH_ORCO, mesh_final->totvert);
 
   /* Compute normals. */
   if (is_own_mesh) {

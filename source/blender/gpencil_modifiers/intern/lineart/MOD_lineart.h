@@ -122,11 +122,7 @@ typedef struct LineartEdge {
   /** We only need link node kind of list here. */
   struct LineartEdge *next;
   struct LineartVert *v1, *v2;
-  /**
-   * Local vertex index for two ends, not pouting in #RenderVert because all verts are loaded, so
-   * as long as fewer than half of the mesh edges are becoming a feature line, we save more memory.
-   */
-  int v1_obindex, v2_obindex;
+
   struct LineartTriangle *t1, *t2;
   ListBase segments;
   char min_occ;
@@ -158,6 +154,8 @@ typedef struct LineartEdgeChain {
 
   /** Chain now only contains one type of segments */
   int type;
+  /** Will only connect chains that has the same loop id. */
+  int loop_id;
   unsigned char material_mask_bits;
   unsigned char intersection_mask;
 
@@ -206,6 +204,12 @@ enum eLineArtTileRecursiveLimit {
 #define LRT_TILE_SPLITTING_TRIANGLE_LIMIT 100
 #define LRT_TILE_EDGE_COUNT_INITIAL 32
 
+typedef struct LineartPendingEdges {
+  LineartEdge **array;
+  int max;
+  int next;
+} LineartPendingEdges;
+
 typedef struct LineartRenderBuffer {
   struct LineartRenderBuffer *prev, *next;
 
@@ -232,6 +236,9 @@ typedef struct LineartRenderBuffer {
   ListBase line_buffer_pointers;
   ListBase triangle_buffer_pointers;
 
+  LineartElementLinkNode *isect_scheduled_up_to;
+  int isect_scheduled_up_to_index;
+
   /** This one's memory is not from main pool and is free()ed after culling stage. */
   ListBase triangle_adjacent_pointers;
 
@@ -250,15 +257,9 @@ typedef struct LineartRenderBuffer {
 
   int triangle_size;
 
-  /* Although using ListBase here, LineartEdge is single linked list.
-   * list.last is used to store worker progress along the list.
-   * See lineart_main_occlusion_begin() for more info. */
-  ListBase contour;
-  ListBase intersection;
-  ListBase crease;
-  ListBase material;
-  ListBase edge_mark;
-  ListBase floating;
+  /* Note: Data inside #pending_edges are allocated with MEM_xxx call instead of in pool. */
+  struct LineartPendingEdges pending_edges;
+  int scheduled_count;
 
   ListBase chains;
 
@@ -364,14 +365,11 @@ typedef struct LineartRenderTaskInfo {
 
   int thread_id;
 
-  /* These lists only denote the part of the main edge list that the thread should iterate over.
-   * Be careful to not iterate outside of these bounds as it is not thread safe to do so. */
-  ListBase contour;
-  ListBase intersection;
-  ListBase crease;
-  ListBase material;
-  ListBase edge_mark;
-  ListBase floating;
+  /**
+   * #pending_edges here only stores a reference to a portion in
+   * LineartRenderbuffer::pending_edges, assigned by the occlusion scheduler.
+   */
+  struct LineartPendingEdges pending_edges;
 
 } LineartRenderTaskInfo;
 
@@ -389,14 +387,8 @@ typedef struct LineartObjectInfo {
 
   bool free_use_mesh;
 
-  /* Threads will add lines inside here, when all threads are done, we combine those into the
-   * ones in LineartRenderBuffer. */
-  ListBase contour;
-  ListBase intersection;
-  ListBase crease;
-  ListBase material;
-  ListBase edge_mark;
-  ListBase floating;
+  /* Note: Data inside #pending_edges are allocated with MEM_xxx call instead of in pool. */
+  struct LineartPendingEdges pending_edges;
 
 } LineartObjectInfo;
 
@@ -440,15 +432,18 @@ typedef struct LineartBoundingArea {
   /** 1,2,3,4 quadrant */
   struct LineartBoundingArea *child;
 
+  SpinLock lock;
+
   ListBase lp;
   ListBase rp;
   ListBase up;
   ListBase bp;
 
-  uint16_t triangle_count;
-  uint16_t max_triangle_count;
-  uint16_t line_count;
-  uint16_t max_line_count;
+  uint32_t triangle_count;
+  uint32_t max_triangle_count;
+  uint32_t line_count;
+  uint32_t max_line_count;
+  uint32_t user_count;
 
   /* Use array for speeding up multiple accesses. */
   struct LineartTriangle **linked_triangles;

@@ -4,15 +4,22 @@
 
 #include "curves_sculpt_intern.hh"
 
+#include "BKE_attribute_math.hh"
 #include "BKE_bvhutils.h"
 #include "BKE_context.h"
 #include "BKE_curves.hh"
+
+#include "DNA_meshdata_types.h"
 
 #include "ED_view3d.h"
 
 #include "UI_interface.h"
 
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+
 #include "BLI_enumerable_thread_specific.hh"
+#include "BLI_length_parameterize.hh"
 #include "BLI_task.hh"
 
 /**
@@ -94,11 +101,30 @@ static std::optional<float3> find_curves_brush_position(const CurvesGeometry &cu
 
         for (const int curve_i : curves_range) {
           const IndexRange points = curves.points_for_curve(curve_i);
-          const int tot_segments = points.size() - 1;
 
-          for (const int segment_i : IndexRange(tot_segments)) {
-            const float3 &p1_cu = positions[points[segment_i]];
-            const float3 &p2_cu = positions[points[segment_i] + 1];
+          if (points.size() == 1) {
+            const float3 &pos_cu = positions[points.first()];
+
+            const float depth_sq_cu = math::distance_squared(ray_start_cu, pos_cu);
+            if (depth_sq_cu > max_depth_sq_cu) {
+              continue;
+            }
+
+            float2 pos_re;
+            ED_view3d_project_float_v2_m4(&region, pos_cu, pos_re, projection.values);
+
+            BrushPositionCandidate candidate;
+            candidate.position_cu = pos_cu;
+            candidate.depth_sq_cu = depth_sq_cu;
+            candidate.distance_sq_re = math::distance_squared(brush_pos_re, pos_re);
+
+            update_if_better(best_candidate, candidate);
+            continue;
+          }
+
+          for (const int segment_i : points.drop_back(1)) {
+            const float3 &p1_cu = positions[segment_i];
+            const float3 &p2_cu = positions[segment_i + 1];
 
             float2 p1_re, p2_re;
             ED_view3d_project_float_v2_m4(&region, p1_cu, p1_re, projection.values);
@@ -141,23 +167,21 @@ static std::optional<float3> find_curves_brush_position(const CurvesGeometry &cu
   return best_candidate.position_cu;
 }
 
-std::optional<CurvesBrush3D> sample_curves_3d_brush(bContext &C,
-                                                    Object &curves_object,
+std::optional<CurvesBrush3D> sample_curves_3d_brush(const Depsgraph &depsgraph,
+                                                    const ARegion &region,
+                                                    const View3D &v3d,
+                                                    const RegionView3D &rv3d,
+                                                    const Object &curves_object,
                                                     const float2 &brush_pos_re,
                                                     const float brush_radius_re)
 {
-  const Depsgraph *depsgraph = CTX_data_depsgraph_pointer(&C);
-  const ARegion *region = CTX_wm_region(&C);
-  const View3D *v3d = CTX_wm_view3d(&C);
-  const RegionView3D *rv3d = CTX_wm_region_view3d(&C);
-
   const Curves &curves_id = *static_cast<Curves *>(curves_object.data);
   const CurvesGeometry &curves = CurvesGeometry::wrap(curves_id.geometry);
   const Object *surface_object = curves_id.surface;
 
   float3 center_ray_start_wo, center_ray_end_wo;
   ED_view3d_win_to_segment_clipped(
-      depsgraph, region, v3d, brush_pos_re, center_ray_start_wo, center_ray_end_wo, true);
+      &depsgraph, &region, &v3d, brush_pos_re, center_ray_start_wo, center_ray_end_wo, true);
 
   /* Shorten ray when the surface object is hit. */
   if (surface_object != nullptr) {
@@ -205,8 +229,8 @@ std::optional<CurvesBrush3D> sample_curves_3d_brush(bContext &C,
       center_ray_start_cu,
       center_ray_end_cu,
       brush_radius_re,
-      *region,
-      *rv3d,
+      region,
+      rv3d,
       curves_object);
   if (!brush_position_optional_cu.has_value()) {
     /* Nothing found. */
@@ -216,9 +240,9 @@ std::optional<CurvesBrush3D> sample_curves_3d_brush(bContext &C,
 
   /* Determine the 3D brush radius. */
   float3 radius_ray_start_wo, radius_ray_end_wo;
-  ED_view3d_win_to_segment_clipped(depsgraph,
-                                   region,
-                                   v3d,
+  ED_view3d_win_to_segment_clipped(&depsgraph,
+                                   &region,
+                                   &v3d,
                                    brush_pos_re + float2(brush_radius_re, 0.0f),
                                    radius_ray_start_wo,
                                    radius_ray_end_wo,
@@ -258,6 +282,75 @@ Vector<float4x4> get_symmetry_brush_transforms(const eCurvesSymmetryType symmetr
   }
 
   return matrices;
+}
+
+void move_last_point_and_resample(MutableSpan<float3> positions, const float3 &new_last_position)
+{
+  /* Find the accumulated length of each point in the original curve,
+   * treating it as a poly curve for performance reasons and simplicity. */
+  Array<float> orig_lengths(length_parameterize::lengths_num(positions.size(), false));
+  length_parameterize::accumulate_lengths<float3>(positions, false, orig_lengths);
+  const float orig_total_length = orig_lengths.last();
+
+  /* Find the factor by which the new curve is shorter or longer than the original. */
+  const float new_last_segment_length = math::distance(positions.last(1), new_last_position);
+  const float new_total_length = orig_lengths.last(1) + new_last_segment_length;
+  const float length_factor = safe_divide(new_total_length, orig_total_length);
+
+  /* Calculate the lengths to sample the original curve with by scaling the original lengths. */
+  Array<float> new_lengths(positions.size() - 1);
+  new_lengths.first() = 0.0f;
+  for (const int i : new_lengths.index_range().drop_front(1)) {
+    new_lengths[i] = orig_lengths[i - 1] * length_factor;
+  }
+
+  Array<int> indices(positions.size() - 1);
+  Array<float> factors(positions.size() - 1);
+  length_parameterize::create_samples_from_sorted_lengths(
+      orig_lengths, new_lengths, false, indices, factors);
+
+  Array<float3> new_positions(positions.size() - 1);
+  length_parameterize::linear_interpolation<float3>(positions, indices, factors, new_positions);
+  positions.drop_back(1).copy_from(new_positions);
+  positions.last() = new_last_position;
+}
+
+CurvesSculptCommonContext::CurvesSculptCommonContext(const bContext &C)
+{
+  this->depsgraph = CTX_data_depsgraph_pointer(&C);
+  this->scene = CTX_data_scene(&C);
+  this->region = CTX_wm_region(&C);
+  this->v3d = CTX_wm_view3d(&C);
+  this->rv3d = CTX_wm_region_view3d(&C);
+}
+
+float3 compute_surface_point_normal(const MLoopTri &looptri,
+                                    const float3 &bary_coord,
+                                    const Span<float3> corner_normals)
+{
+  const int l0 = looptri.tri[0];
+  const int l1 = looptri.tri[1];
+  const int l2 = looptri.tri[2];
+
+  const float3 &l0_normal = corner_normals[l0];
+  const float3 &l1_normal = corner_normals[l1];
+  const float3 &l2_normal = corner_normals[l2];
+
+  const float3 normal = math::normalize(
+      attribute_math::mix3(bary_coord, l0_normal, l1_normal, l2_normal));
+  return normal;
+}
+
+float3 compute_bary_coord_in_triangle(const Mesh &mesh,
+                                      const MLoopTri &looptri,
+                                      const float3 &position)
+{
+  const float3 &v0 = mesh.mvert[mesh.mloop[looptri.tri[0]].v].co;
+  const float3 &v1 = mesh.mvert[mesh.mloop[looptri.tri[1]].v].co;
+  const float3 &v2 = mesh.mvert[mesh.mloop[looptri.tri[2]].v].co;
+  float3 bary_coords;
+  interp_weights_tri_v3(bary_coords, v0, v1, v2, position);
+  return bary_coords;
 }
 
 }  // namespace blender::ed::sculpt_paint

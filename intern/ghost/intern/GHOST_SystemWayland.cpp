@@ -38,7 +38,12 @@
 
 #include <cstring>
 
-/* selected input event code defines from 'linux/input-event-codes.h'
+/* -------------------------------------------------------------------- */
+/** \name Private Types & Defines
+ * \{ */
+
+/**
+ * Selected input event code defines from `linux/input-event-codes.h`
  * We include some of the button input event codes here, since the header is
  * only available in more recent kernel versions. The event codes are used to
  * to differentiate from which mouse button an event comes from.
@@ -46,6 +51,11 @@
 #define BTN_LEFT 0x110
 #define BTN_RIGHT 0x111
 #define BTN_MIDDLE 0x112
+#define BTN_SIDE 0x113
+#define BTN_EXTRA 0x114
+#define BTN_FORWARD 0x115
+#define BTN_BACK 0x116
+// #define BTN_TASK 0x117 /* UNUSED. */
 
 struct buffer_t {
   void *data;
@@ -106,6 +116,7 @@ struct input_t {
 
   struct zwp_relative_pointer_v1 *relative_pointer;
   struct zwp_locked_pointer_v1 *locked_pointer;
+  struct zwp_confined_pointer_v1 *confined_pointer;
 
   struct xkb_context *xkb_context;
   struct xkb_state *xkb_state;
@@ -149,6 +160,12 @@ struct display_t {
   std::vector<struct wl_surface *> os_surfaces;
   std::vector<struct wl_egl_window *> os_egl_windows;
 };
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Private Utility Functions
+ * \{ */
 
 static GHOST_WindowManager *window_manager = nullptr;
 
@@ -423,8 +440,10 @@ static const std::vector<std::string> mime_send = {
     "text/plain",
 };
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
-/** \name Interface Callbacks
+/** \name Listener (Relative Motion), #zwp_relative_pointer_v1_listener
  *
  * These callbacks are registered for Wayland interfaces and called when
  * an event is received from the compositor.
@@ -459,6 +478,12 @@ static void relative_pointer_relative_motion(
 static const zwp_relative_pointer_v1_listener relative_pointer_listener = {
     relative_pointer_relative_motion,
 };
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Listener (Data Source), #wl_data_source_listener
+ * \{ */
 
 static void dnd_events(const input_t *const input, const GHOST_TEventType event)
 {
@@ -501,7 +526,7 @@ static std::string read_pipe(data_offer_t *data_offer, const std::string mime_re
  * A target accepts an offered mime type.
  *
  * Sent when a target accepts pointer_focus or motion events. If
- * a target does not accept any of the offered types, type is NULL.
+ * a target does not accept any of the offered types, type is nullptr.
  */
 static void data_source_target(void * /*data*/,
                                struct wl_data_source * /*wl_data_source*/,
@@ -516,7 +541,7 @@ static void data_source_send(void *data,
                              int32_t fd)
 {
   const char *const buffer = static_cast<char *>(data);
-  if (write(fd, buffer, strlen(buffer) + 1) < 0) {
+  if (write(fd, buffer, strlen(buffer)) < 0) {
     GHOST_PRINT("error writing to clipboard: " << std::strerror(errno) << std::endl);
   }
   close(fd);
@@ -575,6 +600,12 @@ static const struct wl_data_source_listener data_source_listener = {
     data_source_action,
 };
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Listener (Data Offer), #wl_data_offer_listener
+ * \{ */
+
 static void data_offer_offer(void *data,
                              struct wl_data_offer * /*wl_data_offer*/,
                              const char *mime_type)
@@ -601,6 +632,12 @@ static const struct wl_data_offer_listener data_offer_listener = {
     data_offer_source_actions,
     data_offer_action,
 };
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Listener (Data Device), #wl_data_device_listener
+ * \{ */
 
 static void data_device_data_offer(void * /*data*/,
                                    struct wl_data_device * /*wl_data_device*/,
@@ -788,6 +825,12 @@ static const struct wl_data_device_listener data_device_listener = {
     data_device_selection,
 };
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Listener (Pointer), #wl_pointer_listener
+ * \{ */
+
 static void cursor_buffer_release(void *data, struct wl_buffer *wl_buffer)
 {
   cursor_t *cursor = static_cast<cursor_t *>(data);
@@ -822,8 +865,9 @@ static bool update_cursor_scale(cursor_t &cursor, wl_shm *shm)
 {
   int scale = 0;
   for (const output_t *output : cursor.outputs) {
-    if (output->scale > scale)
+    if (output->scale > scale) {
       scale = output->scale;
+    }
   }
 
   if (scale > 0 && cursor.scale != scale) {
@@ -974,6 +1018,18 @@ static void pointer_button(void *data,
     case BTN_RIGHT:
       ebutton = GHOST_kButtonMaskRight;
       break;
+    case BTN_SIDE:
+      ebutton = GHOST_kButtonMaskButton4;
+      break;
+    case BTN_EXTRA:
+      ebutton = GHOST_kButtonMaskButton5;
+      break;
+    case BTN_FORWARD:
+      ebutton = GHOST_kButtonMaskButton6;
+      break;
+    case BTN_BACK:
+      ebutton = GHOST_kButtonMaskButton7;
+      break;
   }
 
   input->data_source->source_serial = serial;
@@ -1011,6 +1067,12 @@ static const struct wl_pointer_listener pointer_listener = {
     pointer_button,
     pointer_axis,
 };
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Listener (Keyboard), #wl_keyboard_listener
+ * \{ */
 
 static void keyboard_keymap(
     void *data, struct wl_keyboard * /*wl_keyboard*/, uint32_t format, int32_t fd, uint32_t size)
@@ -1217,6 +1279,12 @@ static const struct wl_keyboard_listener keyboard_listener = {
     keyboard_repeat_info,
 };
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Listener (Seat), #wl_seat_listener
+ * \{ */
+
 static void seat_capabilities(void *data, struct wl_seat *wl_seat, uint32_t capabilities)
 {
   input_t *input = static_cast<input_t *>(data);
@@ -1252,6 +1320,12 @@ static const struct wl_seat_listener seat_listener = {
     seat_capabilities,
     seat_name,
 };
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Listener (Output), #wl_output_listener
+ * \{ */
 
 static void output_geometry(void *data,
                             struct wl_output * /*wl_output*/,
@@ -1308,6 +1382,12 @@ static const struct wl_output_listener output_listener = {
     output_scale,
 };
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Listener (XDG WM Base), #xdg_wm_base_listener
+ * \{ */
+
 static void shell_ping(void * /*data*/, struct xdg_wm_base *xdg_wm_base, uint32_t serial)
 {
   xdg_wm_base_pong(xdg_wm_base, serial);
@@ -1316,6 +1396,12 @@ static void shell_ping(void * /*data*/, struct xdg_wm_base *xdg_wm_base, uint32_
 static const struct xdg_wm_base_listener shell_listener = {
     shell_ping,
 };
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Listener (Registry), #wl_registry_listener
+ * \{ */
 
 static void global_add(void *data,
                        struct wl_registry *wl_registry,
@@ -1357,6 +1443,7 @@ static void global_add(void *data,
     input->data_source->buffer_out = nullptr;
     input->relative_pointer = nullptr;
     input->locked_pointer = nullptr;
+    input->confined_pointer = nullptr;
     input->seat = static_cast<wl_seat *>(
         wl_registry_bind(wl_registry, name, &wl_seat_interface, 4));
     display->inputs.push_back(input);
@@ -1520,8 +1607,9 @@ void GHOST_SystemWayland::putClipboard(const char *buffer, bool /*selection*/) c
   data_source_t *data_source = d->inputs[0]->data_source;
 
   /* Copy buffer. */
-  data_source->buffer_out = static_cast<char *>(malloc(strlen(buffer) + 1));
-  std::strcpy(data_source->buffer_out, buffer);
+  const size_t buffer_size = strlen(buffer) + 1;
+  data_source->buffer_out = static_cast<char *>(malloc(buffer_size));
+  std::memcpy(data_source->buffer_out, buffer, buffer_size);
 
   data_source->data_source = wl_data_device_manager_create_data_source(d->data_device_manager);
 
@@ -1545,14 +1633,13 @@ uint8_t GHOST_SystemWayland::getNumDisplays() const
 
 GHOST_TSuccess GHOST_SystemWayland::getCursorPosition(int32_t &x, int32_t &y) const
 {
-  if (!d->inputs.empty() && (d->inputs[0]->focus_pointer != nullptr)) {
-    x = d->inputs[0]->x;
-    y = d->inputs[0]->y;
-    return GHOST_kSuccess;
-  }
-  else {
+  if (d->inputs.empty() || (d->inputs[0]->focus_pointer == nullptr)) {
     return GHOST_kFailure;
   }
+
+  x = d->inputs[0]->x;
+  y = d->inputs[0]->y;
+  return GHOST_kSuccess;
 }
 
 GHOST_TSuccess GHOST_SystemWayland::setCursorPosition(int32_t /*x*/, int32_t /*y*/)
@@ -1597,10 +1684,10 @@ GHOST_IContext *GHOST_SystemWayland::createOffscreenContext(GHOST_GLSettings /*g
                                    GHOST_OPENGL_EGL_RESET_NOTIFICATION_STRATEGY,
                                    EGL_OPENGL_API);
 
-    if (context->initializeDrawingContext())
+    if (context->initializeDrawingContext()) {
       return context;
-    else
-      delete context;
+    }
+    delete context;
   }
 
   context = new GHOST_ContextEGL(this,
@@ -1617,9 +1704,7 @@ GHOST_IContext *GHOST_SystemWayland::createOffscreenContext(GHOST_GLSettings /*g
   if (context->initializeDrawingContext()) {
     return context;
   }
-  else {
-    delete context;
-  }
+  delete context;
 
   GHOST_PRINT("Cannot create off-screen EGL context" << std::endl);
 
@@ -1788,7 +1873,7 @@ GHOST_TSuccess GHOST_SystemWayland::setCustomCursorShape(uint8_t *bitmap,
   cursor_t *cursor = &d->inputs[0]->cursor;
 
   static const int32_t stride = sizex * 4; /* ARGB */
-  cursor->file_buffer->size = size_t(stride * sizey);
+  cursor->file_buffer->size = (size_t)stride * sizey;
 
 #ifdef HAVE_MEMFD_CREATE
   const int fd = memfd_create("blender-cursor-custom", MFD_CLOEXEC | MFD_ALLOW_SEALING);
@@ -1901,7 +1986,14 @@ GHOST_TSuccess GHOST_SystemWayland::setCursorVisibility(bool visible)
   return GHOST_kSuccess;
 }
 
+bool GHOST_SystemWayland::supportsCursorWarp()
+{
+  return false;
+}
+
 GHOST_TSuccess GHOST_SystemWayland::setCursorGrab(const GHOST_TGrabCursorMode mode,
+                                                  const GHOST_TGrabCursorMode mode_current,
+
                                                   wl_surface *surface)
 {
   /* ignore, if the required protocols are not supported */
@@ -1913,38 +2005,89 @@ GHOST_TSuccess GHOST_SystemWayland::setCursorGrab(const GHOST_TGrabCursorMode mo
     return GHOST_kFailure;
   }
 
+  /* No change, success. */
+  if (mode == mode_current) {
+    return GHOST_kSuccess;
+  }
+
   input_t *input = d->inputs[0];
 
-  switch (mode) {
-    case GHOST_kGrabDisable:
-      if (input->relative_pointer) {
-        zwp_relative_pointer_v1_destroy(input->relative_pointer);
-        input->relative_pointer = nullptr;
-      }
-      if (input->locked_pointer) {
-        zwp_locked_pointer_v1_destroy(input->locked_pointer);
-        input->locked_pointer = nullptr;
-      }
-      break;
+#define MODE_NEEDS_LOCK(m) ((m) == GHOST_kGrabWrap || (m) == GHOST_kGrabHide)
+#define MODE_NEEDS_HIDE(m) ((m) == GHOST_kGrabHide)
+#define MODE_NEEDS_CONFINE(m) ((m) == GHOST_kGrabNormal)
 
-    case GHOST_kGrabNormal:
-      break;
-    case GHOST_kGrabWrap:
-      input->relative_pointer = zwp_relative_pointer_manager_v1_get_relative_pointer(
-          d->relative_pointer_manager, input->pointer);
-      zwp_relative_pointer_v1_add_listener(
-          input->relative_pointer, &relative_pointer_listener, input);
-      input->locked_pointer = zwp_pointer_constraints_v1_lock_pointer(
-          d->pointer_constraints,
-          surface,
-          input->pointer,
-          nullptr,
-          ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT);
-      break;
+  const bool was_lock = MODE_NEEDS_LOCK(mode_current);
+  const bool use_lock = MODE_NEEDS_LOCK(mode);
 
-    case GHOST_kGrabHide:
+  /* Check for wrap as #supportsCursorWarp isn't supproted. */
+  const bool was_hide = MODE_NEEDS_HIDE(mode_current) || (mode_current == GHOST_kGrabWrap);
+  const bool use_hide = MODE_NEEDS_HIDE(mode) || (mode == GHOST_kGrabWrap);
+
+  const bool was_confine = MODE_NEEDS_CONFINE(mode_current);
+  const bool use_confine = MODE_NEEDS_CONFINE(mode);
+
+#undef MODE_NEEDS_LOCK
+#undef MODE_NEEDS_HIDE
+#undef MODE_NEEDS_CONFINE
+
+  if (!use_hide) {
+    setCursorVisibility(true);
+  }
+
+  /* Switching from one grab mode to another,
+   * in this case disable the current locks as it makes logic confusing,
+   * postpone changing the cursor to avoid flickering. */
+  if (!use_lock) {
+    if (input->relative_pointer) {
+      zwp_relative_pointer_v1_destroy(input->relative_pointer);
+      input->relative_pointer = nullptr;
+    }
+    if (input->locked_pointer) {
+      zwp_locked_pointer_v1_destroy(input->locked_pointer);
+      input->locked_pointer = nullptr;
+    }
+  }
+
+  if (!use_confine) {
+    if (input->confined_pointer) {
+      zwp_confined_pointer_v1_destroy(input->confined_pointer);
+      input->confined_pointer = nullptr;
+    }
+  }
+
+  if (mode != GHOST_kGrabDisable) {
+    if (use_lock) {
+      if (!was_lock) {
+        /* TODO(@campbellbarton): As WAYLAND does not support warping the pointer it may not be
+         * possible to support #GHOST_kGrabWrap by pragmatically settings it's coordinates.
+         * An alternative could be to draw the cursor in software (and hide the real cursor),
+         * or just accept a locked cursor on WAYLAND. */
+        input->relative_pointer = zwp_relative_pointer_manager_v1_get_relative_pointer(
+            d->relative_pointer_manager, input->pointer);
+        zwp_relative_pointer_v1_add_listener(
+            input->relative_pointer, &relative_pointer_listener, input);
+        input->locked_pointer = zwp_pointer_constraints_v1_lock_pointer(
+            d->pointer_constraints,
+            surface,
+            input->pointer,
+            nullptr,
+            ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT);
+      }
+    }
+    else if (use_confine) {
+      if (!was_confine) {
+        input->confined_pointer = zwp_pointer_constraints_v1_confine_pointer(
+            d->pointer_constraints,
+            surface,
+            input->pointer,
+            nullptr,
+            ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT);
+      }
+    }
+
+    if (use_hide && !was_hide) {
       setCursorVisibility(false);
-      break;
+    }
   }
 
   return GHOST_kSuccess;

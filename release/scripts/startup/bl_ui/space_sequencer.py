@@ -1,6 +1,4 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-
-# <pep8 compliant>
 import bpy
 from bpy.types import (
     Header,
@@ -1642,6 +1640,27 @@ class SEQUENCER_PT_source(SequencerButtonsPanel, Panel):
                     split.operator("sound.pack", icon='UGLYPACKAGE', text="")
 
                 layout.prop(sound, "use_memory_cache")
+
+                col = layout.box()
+                col = col.column(align=True)
+                split = col.split(factor=0.5, align=False)
+                split.alignment = 'RIGHT'
+                split.label(text="Samplerate")
+                split.alignment = 'LEFT'
+                if sound.samplerate <= 0:
+                    split.label(text="Unknown")
+                else:
+                    split.label(text="%d Hz." % sound.samplerate, translate=False)
+
+                split = col.split(factor=0.5, align=False)
+                split.alignment = 'RIGHT'
+                split.label(text="Channels")
+                split.alignment = 'LEFT'
+
+                # FIXME(@campbellbarton): this is ugly, we may want to support a way of showing a label from an enum.
+                channel_enum_items = sound.bl_rna.properties["channels"].enum_items
+                split.label(text=channel_enum_items[channel_enum_items.find(sound.channels)].name)
+                del channel_enum_items
         else:
             if strip_type == 'IMAGE':
                 col = layout.column()

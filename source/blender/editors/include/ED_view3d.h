@@ -8,6 +8,7 @@
 #pragma once
 
 #include "BLI_utildefines.h"
+#include "DNA_scene_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -299,7 +300,7 @@ typedef enum {
 } eV3DPlaceOrient;
 
 typedef struct V3DSnapCursorData {
-  short snap_elem;
+  eSnapMode snap_elem;
   float loc[3];
   float nor[3];
   float obmat[4][4];
@@ -322,7 +323,7 @@ typedef struct V3DSnapCursorState {
   struct wmGizmoGroupType *gzgrp_type; /* Force cursor to be drawn only when gizmo is available. */
   float *prevpoint;
   float box_dimensions[3];
-  short snap_elem_force; /* If zero, use scene settings. */
+  eSnapMode snap_elem_force; /* If SCE_SNAP_MODE_NONE, use scene settings. */
   short plane_axis;
   bool use_plane_axis_auto;
   bool draw_point;
@@ -347,7 +348,7 @@ void ED_view3d_cursor_snap_draw_util(struct RegionView3D *rv3d,
                                      const float normal[3],
                                      const uchar color_line[4],
                                      const uchar color_point[4],
-                                     short snap_elem_type);
+                                     eSnapMode snap_elem_type);
 
 /* view3d_iterators.c */
 
@@ -1083,6 +1084,16 @@ bool ED_view3d_quat_to_axis_view(const float viewquat[4],
                                  float epsilon,
                                  char *r_view,
                                  char *r_view_axis_rotation);
+/**
+ * A version of #ED_view3d_quat_to_axis_view that updates `viewquat`
+ * if it's within `epsilon` to an axis-view.
+ *
+ * \note Include the special case function since most callers need to perform these operations.
+ */
+bool ED_view3d_quat_to_axis_view_and_reset_quat(float viewquat[4],
+                                                float epsilon,
+                                                char *r_view,
+                                                char *r_view_axis_rotation);
 
 char ED_view3d_lock_view_from_index(int index);
 char ED_view3d_axis_view_opposite(char view);

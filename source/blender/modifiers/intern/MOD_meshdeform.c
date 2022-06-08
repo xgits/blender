@@ -584,13 +584,14 @@ static void panelRegister(ARegionType *region_type)
 static void blendWrite(BlendWriter *writer, const ID *id_owner, const ModifierData *md)
 {
   MeshDeformModifierData mmd = *(const MeshDeformModifierData *)md;
+  const bool is_undo = BLO_write_is_undo(writer);
 
-  if (ID_IS_OVERRIDE_LIBRARY(id_owner)) {
+  if (ID_IS_OVERRIDE_LIBRARY(id_owner) && !is_undo) {
     BLI_assert(!ID_IS_LINKED(id_owner));
     const bool is_local = (md->flag & eModifierFlag_OverrideLibrary_Local) != 0;
     if (!is_local) {
-      /* Modifier comming from linked data cannot be bound from an override, so we can remove all
-       * binding data, can save a sgnificant amout of memory. */
+      /* Modifier coming from linked data cannot be bound from an override, so we can remove all
+       * binding data, can save a significant amount of memory. */
       mmd.influences_num = 0;
       mmd.bindinfluences = NULL;
       mmd.verts_num = 0;

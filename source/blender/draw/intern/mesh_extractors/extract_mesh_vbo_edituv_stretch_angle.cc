@@ -9,7 +9,7 @@
 
 #include "BKE_mesh.h"
 
-#include "extract_mesh.h"
+#include "extract_mesh.hh"
 
 #include "draw_subdivision.h"
 
@@ -236,7 +236,7 @@ static void extract_edituv_stretch_angle_init_subdiv(const DRWSubdivCache *subdi
                                      draw_subdiv_get_pos_nor_format(),
                                      subdiv_cache->num_subdiv_loops + loose_geom.loop_len);
 
-    draw_subdiv_extract_pos_nor(subdiv_cache, pos_nor);
+    draw_subdiv_extract_pos_nor(subdiv_cache, pos_nor, nullptr);
   }
 
   /* UVs are stored contiguously so we need to compute the offset in the UVs buffer for the active
@@ -292,7 +292,5 @@ constexpr MeshExtract create_extractor_edituv_edituv_stretch_angle()
 
 }  // namespace blender::draw
 
-extern "C" {
 const MeshExtract extract_edituv_stretch_angle =
     blender::draw::create_extractor_edituv_edituv_stretch_angle();
-}

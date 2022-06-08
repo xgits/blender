@@ -170,7 +170,7 @@ struct PBVH {
 
   /* Used during BVH build and later to mark that a vertex needs to update
    * (its normal must be recalculated). */
-  BLI_bitmap *vert_bitmap;
+  bool *vert_bitmap;
 
 #ifdef PERFCNTRS
   int perf_modified;
@@ -198,7 +198,7 @@ struct PBVH {
   const struct MeshElemMap *pmap;
 
   CustomDataLayer *color_layer;
-  AttributeDomain color_domain;
+  eAttrDomain color_domain;
 
   bool is_drawing;
 

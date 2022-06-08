@@ -818,7 +818,7 @@ if(WITH_CYCLES_DEVICE_ONEAPI)
       add_custom_command(
         OUTPUT ${cycles_kernel_oneapi_lib}
         COMMAND "${sycl_compiler_root}/../../env/vars.bat"
-        COMMAND ${SYCL_COMPILER} $<$<CONFIG:Debug,RelWithDebInfo>:-g> ${sycl_compiler_flags}
+        COMMAND ${SYCL_COMPILER} $<$<CONFIG:Debug>:-g>$<$<CONFIG:RelWithDebInfo>:-g> ${sycl_compiler_flags}
         DEPENDS ${cycles_oneapi_kernel_sources})
     else()
       # The open source SYCL compiler just goes by clang++ and does not have such a script.
@@ -859,7 +859,7 @@ if(WITH_CYCLES_DEVICE_ONEAPI)
     if(sycl_compiler_compiler_name MATCHES "dpcpp")
       add_custom_command(
         OUTPUT ${cycles_kernel_oneapi_lib}
-        COMMAND bash -c \"source ${sycl_compiler_root}/../../env/vars.sh&&${SYCL_COMPILER} $<$<CONFIG:Debug,RelWithDebInfo>:-g> ${sycl_compiler_flags}\"
+        COMMAND bash -c \"source ${sycl_compiler_root}/../../env/vars.sh&&${SYCL_COMPILER} $<$<CONFIG:Debug>:-g>$<$<CONFIG:RelWithDebInfo>:-g> ${sycl_compiler_flags}\"
         DEPENDS ${cycles_oneapi_kernel_sources})
     else()
       # The open source SYCL compiler just goes by clang++ and does not have such a script.

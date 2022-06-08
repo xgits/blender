@@ -396,6 +396,7 @@ typedef struct AutomaskingSettings {
   int initial_face_set;
   float cavity_factor;
   int cavity_blur_steps;
+  struct CurveMapping *cavity_curve;
 } AutomaskingSettings;
 
 typedef struct AutomaskingCache {

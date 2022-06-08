@@ -301,6 +301,7 @@ typedef struct Brush {
   /* automasking */
   int automasking_flags;
   int automasking_boundary_edges_propagation_steps;
+  struct CurveMapping *automasking_cavity_curve;
   int automasking_cavity_blur_steps;
 
   float automasking_cavity_factor;

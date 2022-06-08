@@ -911,6 +911,12 @@ static void rna_def_sculpt(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Invert Cavity Mask", "Invert cavity masking.");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
+  prop = RNA_def_property(srna, "use_automasking_custom_cavity_curve", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(
+      prop, NULL, "automasking_flags", BRUSH_AUTOMASKING_CAVITY_USE_CURVE);
+  RNA_def_property_ui_text(prop, "Custom Cavity Curve", "Use custom curve.");
+  RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
+
   prop = RNA_def_property(srna, "symmetrize_direction", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, rna_enum_symmetrize_direction_items);
   RNA_def_property_ui_text(prop, "Direction", "Source and destination for symmetrize operator");

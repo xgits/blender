@@ -21,6 +21,7 @@
 #include "DNA_meshdata_types.h"
 
 #include "BKE_brush.h"
+#include "BKE_colortools.h"
 #include "BKE_context.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
@@ -303,7 +304,13 @@ ATTR_NO_OPT static float sculpt_automasking_cavity_factor(AutomaskingCache *auto
     sculpt_calc_blurred_cavity(ss, automasking, automasking->settings.cavity_blur_steps, vertex);
   }
 
-  return ss->cavity_factor[vertex];
+  float factor = ss->cavity_factor[vertex];
+
+  if (automasking->settings.flags & BRUSH_AUTOMASKING_CAVITY_USE_CURVE) {
+    factor = BKE_curvemapping_evaluateF(automasking->settings.cavity_curve, 0, factor);
+  }
+
+  return factor;
 }
 
 float SCULPT_automasking_factor_get(AutomaskingCache *automasking, SculptSession *ss, int vert)
@@ -597,6 +604,7 @@ static void SCULPT_automasking_cache_settings_update(AutomaskingCache *automaski
   automasking->settings.initial_face_set = SCULPT_active_face_set_get(ss);
   automasking->settings.cavity_factor = brush->automasking_cavity_factor;
   automasking->settings.cavity_blur_steps = brush->automasking_cavity_blur_steps;
+  automasking->settings.cavity_curve = brush->automasking_cavity_curve;
 }
 
 AutomaskingCache *SCULPT_automasking_cache_init(Sculpt *sd, Brush *brush, Object *ob)

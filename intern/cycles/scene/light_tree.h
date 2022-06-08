@@ -93,6 +93,8 @@ struct LightTreeBucketInfo {
   BoundBox bbox;
   OrientationBounds bcone;
   int count;
+
+  static const int num_buckets = 12;
 };
 
 /* Light Tree Build Node
@@ -146,7 +148,7 @@ private:
 
   LightTreeBuildNode* recursive_build(vector<LightTreePrimitiveInfo> &primitive_info, int start, int end, int &total_nodes, vector<LightTreePrimitive> &ordered_prims);
   void split_saoh(const BoundBox &centroid_bounds,
-                  const vector<LightTreePrimitiveInfo> &primitive_info, int start, int end, const BoundBox &bbox, const OrientationBounds &bcone);
+                  const vector<LightTreePrimitiveInfo> &primitive_info, int start, int end, const BoundBox &bbox, const OrientationBounds &bcone, float& min_cost, int& min_dim, int& min_bucket);
   int flatten_tree(const LightTreeBuildNode *node, int &offset);
 
   

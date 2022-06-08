@@ -176,6 +176,63 @@ LightTreeBuildNode *LightTree::recursive_build(vector<LightTreePrimitiveInfo> &p
     }
     node->init_leaf(start, num_prims, node_bbox, node_bcone, energy_total, energy_variance);
   }
+  else {
+    /* Find the best place to split the primitives into 2 nodes. 
+    /* If the best split cost is no better than making a leaf node, make a leaf instead.*/
+    float min_cost;
+    int min_dim, min_bucket;
+    split_saoh(centroid_bounds,
+               primitive_info,
+               start,
+               end,
+               node_bbox,
+               node_bcone,
+               min_cost,
+               min_dim,
+               min_bucket);
+    if (num_prims > max_lights_in_leaf_ || min_cost < energy_total) {
+      /* Partition the primitives between start and end into the appropriate split,
+      /* based on the minimum dimension and minimum bucket returned from split_saoh. 
+      /* This is an O(n) algorithm where we iterate from the left and right side,
+      /* and swaps the appropriate left and right elements until complete. */
+      int left = start, right = end - 1;
+      float bounding_dimension = min_bucket * (centroid_bounds.size()[min_dim] /
+                                               LightTreeBucketInfo::num_buckets) +
+                                 centroid_bounds.min[min_dim];
+      while (left < right) {
+        while (primitive_info[left].centroid[min_dim] <= bounding_dimension && left < end) {
+          left++;
+        }
+
+        while (primitive_info[right].centroid[min_dim] > bounding_dimension && right >= start) {
+          right--;
+        }
+
+        if (left < right) {
+          LightTreePrimitiveInfo temp = primitive_info[left];
+          primitive_info[left] = primitive_info[right];
+          primitive_info[right] = temp;
+        }
+      }
+
+      /* At this point, we should expect right to be just past left, */
+      /* where left points to the first element that belongs to the right node. */
+      LightTreeBuildNode *left_node = recursive_build(
+          primitive_info, start, left, total_nodes, ordered_prims);
+      LightTreeBuildNode *right_node = recursive_build(
+          primitive_info, left, end, total_nodes, ordered_prims);
+      node->init_interior(left_node, right_node);
+    }
+    else {
+      int first_prim_offset = ordered_prims.size();
+      /* to-do: reduce this? */
+      for (int i = start; i < end; i++) {
+        int prim_num = primitive_info[i].prim_num;
+        ordered_prims.push_back(prims_[prim_num]);
+      }
+      node->init_leaf(start, num_prims, node_bbox, node_bcone, energy_total, energy_variance);
+    }
+  }
 
   return node;
 }
@@ -185,30 +242,32 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
                            int start,
                            int end,
                            const BoundBox &bbox,
-                           const OrientationBounds &bcone)
+                           const OrientationBounds &bcone,
+                           float& min_cost,
+                           int& min_dim,
+                           int& min_bucket)
 {
-  const int num_buckets = 12;
-
   /* to-do: test without using this in the calculation, since it's the same for every bucket. */
   const float inv_total_cost = 1 / (bbox.area() * bcone.calculate_measure());
   const float max_extent = max3(centroid_bbox.size());
 
   /* Check each dimension to find the minimum splitting cost. */
-  float min_cost = FLT_MAX;
+  min_cost = FLT_MAX;
   for (int dim = 0; dim < 3; dim++) {
     const float inv_extent = 1 / (centroid_bbox.size()[dim]);
     
     /* Fill in buckets with primitives. */
-    vector<LightTreeBucketInfo> buckets(num_buckets);
+    vector<LightTreeBucketInfo> buckets(LightTreeBucketInfo::num_buckets);
     for (int i = start; i < end; i++) {
       const LightTreePrimitiveInfo &primitive = primitive_info[i];
 
       /* Place primitive into the appropriate bucket,
       /* where the centroid box is split into equal partitions. */
-      int bucket_idx = num_buckets * primitive.bbox.size()[dim] * inv_extent;
-      if (bucket_idx == num_buckets)
+      int bucket_idx = LightTreeBucketInfo::num_buckets *
+                       (primitive.centroid[dim] - centroid_bbox.min[dim]) * inv_extent;
+      if (bucket_idx == LightTreeBucketInfo::num_buckets)
       {
-        bucket_idx = num_buckets - 1;
+        bucket_idx = LightTreeBucketInfo::num_buckets - 1;
       }
 
       buckets[bucket_idx].count++;
@@ -218,11 +277,11 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
     }
 
     /* Calculate the cost of splitting at each point between partitions. */
-    vector<float> bucket_costs(num_buckets - 1);
+    vector<float> bucket_costs(LightTreeBucketInfo::num_buckets - 1);
     float energy_L, energy_R;
     BoundBox bbox_L, bbox_R;
     OrientationBounds bcone_L, bcone_R;
-    for (int split = 0; split < num_buckets - 1; split++) {
+    for (int split = 0; split < LightTreeBucketInfo::num_buckets - 1; split++) {
       energy_L = 0;
       energy_R = 0;
       bbox_L = BoundBox::empty;
@@ -242,14 +301,19 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
         bcone_R = merge(bcone_R, buckets[right].bcone);
       }
       
-      /* Calculate the cost of splitting using the heuristic as described in the paper (make more specific). */
+      /* Calculate the cost of splitting using the heuristic as described in the paper. */
       float left = energy_L * bbox_L.area() * bcone_L.calculate_measure();
       float right = energy_R * bbox_R.area() * bcone_R.calculate_measure();
-      float regularization = max_extent / inv_extent;
+      float regularization = max_extent * inv_extent;
       bucket_costs[split] = regularization * left * right * inv_total_cost;
+
+      if (bucket_costs[split] < min_cost) {
+        min_cost = bucket_costs[split];
+        min_dim = dim;
+        min_bucket = split;
+      }
     }
   }
-  
 }
 
 int LightTree::flatten_tree(const LightTreeBuildNode *node, int &offset)

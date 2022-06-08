@@ -262,6 +262,7 @@ size_t oneapi_kernel_preferred_local_size(SyclQueue *queue_,
     case DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT:
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_MNEE:
     case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME:
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW:
       preferred_work_group_size = preferred_work_group_size_intersect_shading;
@@ -414,6 +415,11 @@ bool oneapi_enqueue_kernel(KernelContext *kernel_context,
                       local_size,
                       args,
                       oneapi_kernel_integrator_shade_surface_raytrace);
+          break;
+        }
+        case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_MNEE: {
+          oneapi_call(
+              kg, cgh, global_size, local_size, args, oneapi_kernel_integrator_shade_surface_mnee);
           break;
         }
         case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME: {

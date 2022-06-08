@@ -161,8 +161,8 @@ float SCULPT_calc_cavity(SculptSession *ss, const int vertex)
 }
 
 static float sculpt_automasking_cavity_factor_intern(SculptSession *ss,
-                                                                 AutomaskingCache *automasking,
-                                                                 int vert)
+                                                     AutomaskingCache *automasking,
+                                                     int vert)
 {
   float factor = SCULPT_calc_cavity(ss, vert);
   float sign = signf(factor);
@@ -197,10 +197,10 @@ struct CavityBlurVert {
   }
 };
 
-ATTR_NO_OPT static void sculpt_calc_blurred_cavity(SculptSession *ss,
-                                                   AutomaskingCache *automasking,
-                                                   int steps,
-                                                   int vertex)
+static void sculpt_calc_blurred_cavity(SculptSession *ss,
+                                       AutomaskingCache *automasking,
+                                       int steps,
+                                       int vertex)
 {
   if (steps == 0) {
     ss->cavity_factor[vertex] = sculpt_automasking_cavity_factor_intern(ss, automasking, vertex);
@@ -285,9 +285,9 @@ ATTR_NO_OPT static void sculpt_calc_blurred_cavity(SculptSession *ss,
   ss->cavity_stroke_id[vertex] = ss->stroke_id;
 }
 
-ATTR_NO_OPT static float sculpt_automasking_cavity_factor(AutomaskingCache *automasking,
-                                                          SculptSession *ss,
-                                                          int vertex)
+static float sculpt_automasking_cavity_factor(AutomaskingCache *automasking,
+                                              SculptSession *ss,
+                                              int vertex)
 {
   if (ss->cavity_stroke_id[vertex] != ss->stroke_id) {
     sculpt_calc_blurred_cavity(ss, automasking, automasking->settings.cavity_blur_steps, vertex);

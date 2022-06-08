@@ -86,12 +86,16 @@ bool device_oneapi_init()
   if (getenv("SYCL_CACHE_TRESHOLD") == nullptr) {
     _putenv_s("SYCL_CACHE_THRESHOLD", "0");
   }
+  if (getenv("SYCL_DEVICE_FILTER") == nullptr) {
+    _putenv_s("SYCL_DEVICE_FILTER", "host,level_zero");
+  }
   if (getenv("SYCL_PI_LEVEL_ZERO_USE_COPY_ENGINE_FOR_IN_ORDER_QUEUE") == nullptr) {
     _putenv_s("SYCL_PI_LEVEL_ZERO_USE_COPY_ENGINE_FOR_IN_ORDER_QUEUE", "0");
   }
 #  elif __linux__
   setenv("SYCL_CACHE_PERSISTENT", "1", false);
   setenv("SYCL_CACHE_THRESHOLD", "0", false);
+  setenv("SYCL_DEVICE_FILTER", "host,level_zero", false);
   setenv("SYCL_PI_LEVEL_ZERO_USE_COPY_ENGINE_FOR_IN_ORDER_QUEUE", "0", false);
 #  endif
 

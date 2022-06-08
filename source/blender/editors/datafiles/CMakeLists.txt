@@ -772,12 +772,15 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.curve.pen
   ops.curve.radius
   ops.curve.vertex_random
+  ops.curves.density
   ops.curves.sculpt_add
   ops.curves.sculpt_comb
   ops.curves.sculpt_cut
   ops.curves.sculpt_delete
   ops.curves.sculpt_grow_shrink
+  ops.curves.sculpt_pinch
   ops.curves.sculpt_puff
+  ops.curves.sculpt_smooth
   ops.curves.sculpt_snake_hook
   ops.generic.cursor
   ops.generic.select

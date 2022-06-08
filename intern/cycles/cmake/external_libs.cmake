@@ -92,6 +92,7 @@ if(CYCLES_STANDALONE_REPOSITORY)
     _set_default(WEBP_ROOT_DIR "${_cycles_lib_dir}/webp")
     _set_default(ZLIB_ROOT "${_cycles_lib_dir}/zlib")
     _set_default(LEVEL_ZERO_ROOT_DIR "${_cycles_lib_dir}/level-zero")
+    _set_default(SYCL_ROOT_DIR "${_cycles_lib_dir}/dpcpp")
 
     # Ignore system libraries
     set(CMAKE_IGNORE_PATH "${CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES};${CMAKE_SYSTEM_INCLUDE_PATH};${CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES};${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES}")
@@ -652,6 +653,7 @@ endif()
 ###########################################################################
 # oneAPI
 ###########################################################################
+
 if (WITH_CYCLES_DEVICE_ONEAPI)
   find_package(SYCL)
   find_package(LevelZero)

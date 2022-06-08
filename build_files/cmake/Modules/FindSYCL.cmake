@@ -23,6 +23,11 @@ SET(_sycl_search_dirs
   C:/Program\ Files\ \(x86\)/Intel/oneAPI/compiler/latest/windows
 )
 
+# Find DPC++ compiler.
+# Since the compiler name is possibly conflicting with the system-wide
+# CLang start with looking for either dpcpp or clang binary in the given
+# list of search paths only. If that fails, try to look for a system-wide
+# dpcpp binary.
 FIND_PROGRAM(SYCL_COMPILER
   NAMES
     dpcpp
@@ -31,7 +36,21 @@ FIND_PROGRAM(SYCL_COMPILER
     ${_sycl_search_dirs}
   PATH_SUFFIXES
     bin
+  NO_CMAKE_FIND_ROOT_PATH
 )
+
+# NOTE: No clang++ here so that we do not pick up a system-wide CLang
+# compiler.
+if(NOT SYCL_COMPILER)
+  FIND_PROGRAM(SYCL_COMPILER
+   NAMES
+      dpcpp
+    HINTS
+      ${_sycl_search_dirs}
+    PATH_SUFFIXES
+      bin
+  )
+endif()
 
 FIND_LIBRARY(SYCL_LIBRARY
   NAMES

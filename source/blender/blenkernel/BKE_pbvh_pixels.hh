@@ -205,7 +205,16 @@ struct NodeData {
   }
 };
 
+struct PBVHData {
+  /* Per UVPRimitive contains the paint data. */
+
+  void clear_data()
+  {
+  }
+};
+
 NodeData &BKE_pbvh_pixels_node_data_get(PBVHNode &node);
 void BKE_pbvh_pixels_mark_image_dirty(PBVHNode &node, Image &image, ImageUser &image_user);
+PBVHData &BKE_pbvh_pixels_data_get(PBVH &pbvh);
 
 }  // namespace blender::bke::pbvh::pixels

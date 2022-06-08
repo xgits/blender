@@ -268,25 +268,6 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
       prim1.append_to_uv_vertices();
       island.uv_primitives.append(prim1);
     }
-
-#if 0
-    prim1.edges[0].vertices[0].uv = border.verts[vert.index].uv;
-    prim1.edges[0].vertices[1].uv = border.verts[vert.prev_index].uv;
-    prim1.edges[1].vertices[0].uv = border.verts[vert.prev_index].uv;
-    prim1.edges[1].vertices[1].uv = center_uv;
-    prim1.edges[2].vertices[0].uv = center_uv;
-    prim1.edges[2].vertices[1].uv = border.verts[vert.index].uv;
-    island.uv_primitives.append(prim1);
-
-    UVPrimitive prim2(0);
-    prim2.edges[0].vertices[0].uv = border.verts[vert.index].uv;
-    prim2.edges[0].vertices[1].uv = center_uv;
-    prim2.edges[1].vertices[0].uv = center_uv;
-    prim2.edges[1].vertices[1].uv = border.verts[vert.next_index].uv;
-    prim2.edges[2].vertices[0].uv = border.verts[vert.next_index].uv;
-    prim2.edges[2].vertices[1].uv = border.verts[vert.index].uv;
-    island.uv_primitives.append(prim2);
-#endif
   }
   else {
   }

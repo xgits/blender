@@ -130,6 +130,7 @@ struct EncodePixelsUserData {
   PBVH *pbvh;
   Vector<PBVHNode *> *nodes;
   const MLoopUV *ldata_uv;
+  const uv_islands::UVIslands *uv_islands;
 };
 
 static void do_encode_pixels(void *__restrict userdata,
@@ -155,6 +156,26 @@ static void do_encode_pixels(void *__restrict userdata,
 
     Triangles &triangles = node_data->triangles;
     for (int triangle_index = 0; triangle_index < triangles.size(); triangle_index++) {
+      int mesh_prim_index = node->prim_indices[triangle_index];
+      for (const uv_islands::UVIsland &island : data->uv_islands->islands) {
+        for (const uv_islands::UVPrimitive &uv_primitive : island.uv_primitives) {
+          if (uv_primitive.primitive->index == mesh_prim_index) {
+            float2 uvs[3] = {
+                uv_primitive.edges[0]->vertices[0]->uv - tile_offset,
+                uv_primitive.edges[1]->vertices[0]->uv - tile_offset,
+                uv_primitive.edges[2]->vertices[0]->uv - tile_offset,
+            };
+            const float minv = clamp_f(min_fff(uvs[0].y, uvs[1].y, uvs[2].y), 0.0f, 1.0f);
+            const int miny = floor(minv * image_buffer->y);
+            const float maxv = clamp_f(max_fff(uvs[0].y, uvs[1].y, uvs[2].y), 0.0f, 1.0f);
+            const int maxy = min_ii(ceil(maxv * image_buffer->y), image_buffer->y);
+            const float minu = clamp_f(min_fff(uvs[0].x, uvs[1].x, uvs[2].x), 0.0f, 1.0f);
+            const int minx = floor(minu * image_buffer->x);
+            const float maxu = clamp_f(max_fff(uvs[0].x, uvs[1].x, uvs[2].x), 0.0f, 1.0f);
+            const int maxx = min_ii(ceil(maxu * image_buffer->x), image_buffer->x);
+          }
+        }
+      }
       const MLoopTri *lt = &pbvh->looptri[node->prim_indices[triangle_index]];
       float2 uvs[3] = {
           float2(data->ldata_uv[lt->tri[0]].uv) - tile_offset,
@@ -229,6 +250,16 @@ static bool find_nodes_to_update(PBVH *pbvh, Vector<PBVHNode *> &r_nodes_to_upda
   int64_t nodes_to_update_len = count_nodes_to_update(pbvh);
   if (nodes_to_update_len == 0) {
     return false;
+  }
+
+  /* Init or reset PBVH pixel data when changes detected. */
+  if (pbvh->pixels.data == nullptr) {
+    PBVHData *pbvh_data = MEM_new<PBVHData>(__func__);
+    pbvh->pixels.data = pbvh_data;
+  }
+  else {
+    PBVHData *pbvh_data = static_cast<PBVHData *>(pbvh->pixels.data);
+    pbvh_data->clear_data();
   }
 
   r_nodes_to_update.reserve(nodes_to_update_len);
@@ -323,6 +354,7 @@ static void update_pixels(PBVH *pbvh, Mesh *mesh, Image *image, ImageUser *image
   user_data.image_user = image_user;
   user_data.ldata_uv = ldata_uv;
   user_data.nodes = &nodes_to_update;
+  user_data.uv_islands = &islands;
 
   TaskParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, true, nodes_to_update.size());
@@ -377,6 +409,13 @@ NodeData &BKE_pbvh_pixels_node_data_get(PBVHNode &node)
   return *node_data;
 }
 
+PBVHData &BKE_pbvh_pixels_data_get(PBVH &pbvh)
+{
+  BLI_assert(pbvh.pixels.data != nullptr);
+  PBVHData *data = static_cast<PBVHData *>(pbvh.pixels.data);
+  return *data;
+}
+
 void BKE_pbvh_pixels_mark_image_dirty(PBVHNode &node, Image &image, ImageUser &image_user)
 {
   BLI_assert(node.pixels.node_data != nullptr);
@@ -408,10 +447,17 @@ void BKE_pbvh_build_pixels(PBVH *pbvh, Mesh *mesh, Image *image, ImageUser *imag
   update_pixels(pbvh, mesh, image, image_user);
 }
 
-void pbvh_pixels_free(PBVHNode *node)
+void pbvh_node_pixels_free(PBVHNode *node)
 {
   NodeData *node_data = static_cast<NodeData *>(node->pixels.node_data);
   MEM_delete(node_data);
   node->pixels.node_data = nullptr;
+}
+
+void pbvh_pixels_free(PBVH *pbvh)
+{
+  PBVHData *pbvh_data = static_cast<PBVHData *>(pbvh->pixels.data);
+  MEM_delete(pbvh_data);
+  pbvh->pixels.data = nullptr;
 }
 }

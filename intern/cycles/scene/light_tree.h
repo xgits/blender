@@ -4,6 +4,7 @@
 #ifndef __LIGHT_TREE_H__
 #define __LIGHT_TREE_H__
 
+#include "scene/light.h"
 #include "scene/scene.h"
 
 #include "util/boundbox.h"

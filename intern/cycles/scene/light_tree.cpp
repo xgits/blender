@@ -53,6 +53,37 @@ OrientationBounds merge(const OrientationBounds& cone_a,
   }
 }
 
+/* to-do: right now, this is assuming that the primitive is a point light.
+/* The plan is to progressively add support for more primitives. 
+/* Some of the logic is different from the past GSoC work, so 
+/* will have to see which logic is more correct. */
+BoundBox LightTreePrimitive::calculate_bbox(Scene *scene) const
+{
+  BoundBox bbox = BoundBox::empty;
+  Light *lamp = scene->lights[lamp_id];
+  /* A point light should occupy no space, but the bounding box
+  /* should at least contain the position of the point. */
+  bbox.grow(lamp->get_co());
+  return bbox;
+}
+
+OrientationBounds LightTreePrimitive::calculate_bcone(Scene *scene) const
+{
+  OrientationBounds bcone;
+  Light *lamp = scene->lights[lamp_id];
+  bcone.axis = lamp->get_dir() / len(lamp->get_dir());
+  bcone.theta_o = M_PI_F;
+  bcone.theta_e = M_PI_2_F;
+  return bcone;
+}
+
+float LightTreePrimitive::calculate_energy(Scene *scene) const
+{
+  Light *lamp = scene->lights[lamp_id];
+  /* Past GSoC work also divides this by pi, but will need to test which is more accurate. */
+  return scene->shader_manager->linear_rgb_to_gray(lamp->get_strength());
+}
+
 void LightTreeBuildNode::init_leaf(
     uint offset, uint n, const BoundBox &b, const OrientationBounds &c, float e, float e_var)
 {

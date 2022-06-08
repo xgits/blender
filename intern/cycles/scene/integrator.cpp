@@ -183,6 +183,9 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   kintegrator->direct_light_sampling_type = DIRECT_LIGHT_SAMPLING_MIS;
 #endif
 
+  kintegrator->use_light_tree = scene->integrator->use_light_tree;
+  kintegrator->splitting_threshold = scene->integrator->splitting_threshold;
+
   /* Transparent Shadows
    * We only need to enable transparent shadows, if we actually have
    * transparent shaders in the scene. Otherwise we can disable it

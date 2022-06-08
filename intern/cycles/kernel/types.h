@@ -1288,8 +1288,12 @@ typedef struct KernelIntegrator {
   /* MIS debugging. */
   int direct_light_sampling_type;
 
+  /* Light tree. */
+  int use_light_tree;
+  float splitting_threshold;
+
   /* padding */
-  int pad1;
+  int pad1, pad2, pad3;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 

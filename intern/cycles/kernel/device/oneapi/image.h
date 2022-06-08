@@ -299,6 +299,12 @@ ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals, int id, float3 P, in
   else if (info.data_type == IMAGE_DATA_TYPE_NANOVDB_FLOAT3) {
     return NanoVDBInterpolator<nanovdb::Vec3f>::interp_3d(info, x, y, z, interpolation);
   }
+  else if (info.data_type == IMAGE_DATA_TYPE_NANOVDB_FPN) {
+    return NanoVDBInterpolator<nanovdb::FpN>::interp_3d(info, P.x, P.y, P.z, interp);
+  }
+  else if (info.data_type == IMAGE_DATA_TYPE_NANOVDB_FP16) {
+    return NanoVDBInterpolator<nanovdb::Fp16>::interp_3d(info, P.x, P.y, P.z, interp);
+  }
 #else
   if (info.data_type == IMAGE_DATA_TYPE_NANOVDB_FLOAT ||
       info.data_type == IMAGE_DATA_TYPE_NANOVDB_FLOAT3) {

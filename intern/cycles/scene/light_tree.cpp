@@ -61,9 +61,9 @@ BoundBox LightTreePrimitive::calculate_bbox(Scene *scene) const
 {
   BoundBox bbox = BoundBox::empty;
   Light *lamp = scene->lights[lamp_id];
-  /* A point light should occupy no space, but the bounding box
-   * should at least contain the position of the point. */
-  bbox.grow(lamp->get_co());
+  /* A point light can emit light from any point within its radius. */
+  bbox.grow(lamp->get_co() - make_float3(lamp->get_size()));
+  bbox.grow(lamp->get_co() + make_float3(lamp->get_size()));
   return bbox;
 }
 
@@ -137,6 +137,16 @@ LightTree::LightTree(const vector<LightTreePrimitive> &prims, Scene *scene, uint
   int offset = 0;
   nodes_.resize(total_nodes);
   flatten_tree(root, offset);
+}
+
+const vector<LightTreePrimitive> &LightTree::get_prims() const
+{
+  return prims_;
+}
+
+const vector<PackedLightTreeNode> &LightTree::get_nodes() const
+{
+  return nodes_;
 }
 
 LightTreeBuildNode *LightTree::recursive_build(vector<LightTreePrimitiveInfo> &primitive_info,
@@ -321,6 +331,8 @@ int LightTree::flatten_tree(const LightTreeBuildNode *node, int &offset)
   PackedLightTreeNode *current_node = &nodes_[offset];
   current_node->bbox = node->bbox;
   current_node->bcone = node->bcone;
+  current_node->energy = node->energy;
+  current_node->energy_variance = node->energy_variance;
   int original_offset = offset;
   offset++;
 
@@ -329,10 +341,13 @@ int LightTree::flatten_tree(const LightTreeBuildNode *node, int &offset)
   if (node->num_lights > 0) {
     current_node->first_prim_index = node->first_prim_index;
     current_node->num_lights = node->num_lights;
+    current_node->is_leaf_node = true;
   }
   else {
     current_node->num_lights = 0;
-    /* The first child is located directly to the left of the parent. */
+    current_node->is_leaf_node = false;
+
+    /* The first child is located directly to the right of the parent. */
     flatten_tree(node->children[0], offset);
     current_node->second_child_index = flatten_tree(node->children[1], offset);
   }

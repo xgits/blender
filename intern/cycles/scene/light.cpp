@@ -24,8 +24,6 @@
 #include "util/progress.h"
 #include "util/task.h"
 
-#include <iostream>
-
 CCL_NAMESPACE_BEGIN
 
 static void shade_background_pixels(Device *device,
@@ -278,15 +276,33 @@ void LightManager::device_update_distribution(Device *,
 
   bool background_mis = false;
 
+  /* We want to add both lights and emissive triangles to this vector for light tree construction. */
+  vector<LightTreePrimitive> light_prims;
+
+  /* When we keep track of the light index, only contributing lights will be added to the device.
+   * Therefore, we want to keep track of the light's index on the device.
+   * However, we also need the light's index in the scene when we're constructing the tree. */
+  int device_light_index = 0;
+  int scene_light_index = 0;
   foreach (Light *light, scene->lights) {
     if (light->is_enabled) {
+      LightTreePrimitive light_prim;
+      light_prim.prim_id = ~device_light_index; /* -prim_id - 1 is a light source index. */
+      light_prim.lamp_id = scene_light_index;
+      light_prims.push_back(light_prim);
+
       num_lights++;
+      device_light_index++;
     }
     if (light->is_portal) {
       num_portals++;
     }
+
+    scene_light_index++;
   }
 
+  /* Similarly, we also want to keep track of the index of triangles that are emissive. */
+  int device_triangle_index = 0;
   foreach (Object *object, scene->objects) {
     if (progress.get_cancel())
       return;
@@ -295,7 +311,7 @@ void LightManager::device_update_distribution(Device *,
       continue;
     }
 
-    /* Count triangles. */
+    /* Count emissive triangles. */
     Mesh *mesh = static_cast<Mesh *>(object->get_geometry());
     size_t mesh_num_triangles = mesh->num_triangles();
     for (size_t i = 0; i < mesh_num_triangles; i++) {
@@ -305,9 +321,17 @@ void LightManager::device_update_distribution(Device *,
                            scene->default_surface;
 
       if (shader->get_use_mis() && shader->has_surface_emission) {
+        /* to-do: for the light tree implementation, we eventually want to include emissive triangles.
+         * Right now, point lights are the main concern. */
+        LightTreePrimitive light_prim;
+        light_prim.prim_id = i + mesh->prim_offset;
+        light_prim.object_id = device_triangle_index;
+        light_prims.push_back(light_prim);
         num_triangles++;
       }
     }
+
+    device_triangle_index++;
   }
 
   size_t num_distribution = num_triangles + num_lights;
@@ -317,23 +341,65 @@ void LightManager::device_update_distribution(Device *,
   KernelLightDistribution *distribution = dscene->light_distribution.alloc(num_distribution + 1);
   float totarea = 0.0f;
 
+  if (scene->integrator->get_use_light_tree()) {
+    /* For now, we'll start with a smaller number of max lights in a node.
+     * More benchmarking is needed to determine what number works best. */
+    LightTree light_tree(light_prims, scene, 8);
+    light_prims = light_tree.get_prims();
+
+    const vector<PackedLightTreeNode> &linearized_bvh = light_tree.get_nodes();
+    KernelLightTreeNode *light_tree_nodes = dscene->light_tree_nodes.alloc(linearized_bvh.size());
+    for (int index = 0; index < linearized_bvh.size(); index++) {
+      const PackedLightTreeNode &node = linearized_bvh[index];
+
+      for (int i = 0; i < 3; i++) {
+        light_tree_nodes[index].bounding_box_min[i] = node.bbox.min[i];
+        light_tree_nodes[index].bounding_box_max[i] = node.bbox.max[i];
+        light_tree_nodes[index].bounding_cone_axis[i] = node.bcone.axis[i];
+      }
+      light_tree_nodes[index].theta_o = node.bcone.theta_o;
+      light_tree_nodes[index].theta_e = node.bcone.theta_e;
+
+      /* Here we need to make a distinction between interior and leaf nodes. */
+      if (node.is_leaf_node) {
+        light_tree_nodes[index].num_prims = node.num_lights;
+        light_tree_nodes[index].child_index = -node.first_prim_index;
+      }
+      else {
+        light_tree_nodes[index].energy_variance = node.energy_variance;
+        light_tree_nodes[index].child_index = node.second_child_index;
+      }
+    }
+
+    dscene->light_tree_nodes.copy_to_device();
+  }
+
   /* triangles */
   size_t offset = 0;
-  int j = 0;
 
-  foreach (Object *object, scene->objects) {
+  /* Since the LightTree construction will re-order the primitives such that
+   * light primitives in the same cluster will be adjacent to one another.
+   * Just to be safe, we iterate through the light_prims array in case they've been reordered. */
+  foreach (LightTreePrimitive prim, light_prims) {
     if (progress.get_cancel())
       return;
 
+    /* Since we're now iterating through all emissive primitives, we need
+     * to first check if the primitive is actually a triangle. */
+    if (prim.prim_id < 0) {
+      offset++;
+      continue;
+    }
+
+    Object *object = scene->objects[prim.object_id];
+
     if (!object_usable_as_light(object)) {
-      j++;
       continue;
     }
     /* Sum area. */
     Mesh *mesh = static_cast<Mesh *>(object->get_geometry());
     bool transform_applied = mesh->transform_applied;
     Transform tfm = object->get_tfm();
-    int object_id = j;
     int shader_flag = 0;
 
     if (!(object->get_visibility() & PATH_RAY_CAMERA)) {
@@ -364,9 +430,9 @@ void LightManager::device_update_distribution(Device *,
 
       if (shader->get_use_mis() && shader->has_surface_emission) {
         distribution[offset].totarea = totarea;
-        distribution[offset].prim = i + mesh->prim_offset;
+        distribution[offset].prim = prim.prim_id;
         distribution[offset].mesh_light.shader_flag = shader_flag;
-        distribution[offset].mesh_light.object_id = object_id;
+        distribution[offset].mesh_light.object_id = prim.object_id;
         offset++;
 
         Mesh::Triangle t = mesh->get_triangle(i);
@@ -386,24 +452,30 @@ void LightManager::device_update_distribution(Device *,
         totarea += triangle_area(p1, p2, p3);
       }
     }
-
-    j++;
   }
 
   float trianglearea = totarea;
-  std::cout << "TOTAL AREA: " << trianglearea << std::endl;
   /* point lights */
   bool use_lamp_mis = false;
   int light_index = 0;
 
   if (num_lights > 0) {
     float lightarea = (totarea > 0.0f) ? totarea / num_lights : 1.0f;
-    foreach (Light *light, scene->lights) {
+
+    /* Again, we iterate over the light_prims array. */
+    offset = 0;
+    foreach (LightTreePrimitive prim, light_prims) {
+      if (prim.prim_id >= 0) {
+        offset++;
+        continue;
+      }
+
+      Light *light = scene->lights[prim.lamp_id];
       if (!light->is_enabled)
         continue;
 
       distribution[offset].totarea = totarea;
-      distribution[offset].prim = ~light_index;
+      distribution[offset].prim = prim.prim_id;
       distribution[offset].lamp.pad = 1.0f;
       distribution[offset].lamp.size = light->size;
       totarea += lightarea;
@@ -457,6 +529,7 @@ void LightManager::device_update_distribution(Device *,
     kintegrator->pdf_lights = 0.0f;
 
     /* sample one, with 0.5 probability of light or triangle */
+    /* to-do: this pdf is probably going to need adjustment if a light tree is used. */
     kintegrator->num_all_lights = num_lights;
 
     if (trianglearea > 0.0f) {
@@ -1010,6 +1083,8 @@ void LightManager::device_update(Device *device,
 
 void LightManager::device_free(Device *, DeviceScene *dscene, const bool free_background)
 {
+  /* to-do: check if the light tree member variables need to be wrapped in a conditional too*/
+  dscene->light_tree_nodes.free();
   dscene->light_distribution.free();
   dscene->lights.free();
   if (free_background) {

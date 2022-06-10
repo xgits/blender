@@ -60,6 +60,9 @@ KERNEL_TEX(KernelLight, __lights)
 KERNEL_TEX(float2, __light_background_marginal_cdf)
 KERNEL_TEX(float2, __light_background_conditional_cdf)
 
+/* light tree */
+KERNEL_TEX(KernelLightTreeNode, __light_tree_nodes)
+
 /* particles */
 KERNEL_TEX(KernelParticle, __particles)
 

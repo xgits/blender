@@ -13,8 +13,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-#define LIGHT_TREE_NODE_SIZE
-
 /* Orientation Bounds
  *
  * Bounds the normal axis of the lights,
@@ -120,11 +118,14 @@ struct LightTreeBuildNode {
 struct PackedLightTreeNode {
   BoundBox bbox;
   OrientationBounds bcone;
+  float energy;
+  float energy_variance;
   union {
     int first_prim_index;   /* leaf nodes contain an index to first primitive. */
     int second_child_index; /* interior nodes contain an index to second child. */
   };
   int num_lights;
+  bool is_leaf_node;
 };
 
 /* Light BVH
@@ -140,13 +141,14 @@ class LightTree {
 public:
   LightTree(const vector<LightTreePrimitive> &prims, Scene *scene, uint max_lights_in_leaf);
 
+  const vector<LightTreePrimitive> &get_prims() const;
+  const vector<PackedLightTreeNode> &get_nodes() const;
+
 private:
   LightTreeBuildNode* recursive_build(vector<LightTreePrimitiveInfo> &primitive_info, int start, int end, int &total_nodes, vector<LightTreePrimitive> &ordered_prims);
   void split_saoh(const BoundBox &centroid_bounds,
                   const vector<LightTreePrimitiveInfo> &primitive_info, int start, int end, const BoundBox &bbox, const OrientationBounds &bcone, float& min_cost, int& min_dim, int& min_bucket);
   int flatten_tree(const LightTreeBuildNode *node, int &offset);
-
-  
 };
 
 CCL_NAMESPACE_END

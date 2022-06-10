@@ -244,6 +244,14 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
       prim1.append_to_uv_edges();
       prim1.append_to_uv_vertices();
       island.uv_primitives.append(prim1);
+
+      /* Update border */
+      UVPrimitive &new_prim = island.uv_primitives.last();
+      UVEdge *new_edge = new_prim.edges[1];
+      UVBorderEdge *border_edge = corner.first;
+      border_edge->uv_primitive = &new_prim;
+      border_edge->edge = new_edge;
+      border_edge->reverse_order = new_edge->vertices[0]->uv == center_vertex_ptr->uv;
     }
     {
       MeshPrimitive *mesh_primitive = corner.first->uv_primitive->primitive;
@@ -267,103 +275,18 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
       prim1.append_to_uv_edges();
       prim1.append_to_uv_vertices();
       island.uv_primitives.append(prim1);
+
+      /* Update border */
+      UVPrimitive &new_prim = island.uv_primitives.last();
+      UVEdge *new_edge = new_prim.edges[1];
+      UVBorderEdge *border_edge = corner.second;
+      border_edge->uv_primitive = &new_prim;
+      border_edge->edge = new_edge;
+      border_edge->reverse_order = new_edge->vertices[1]->uv == center_vertex_ptr->uv;
     }
   }
   else {
   }
-#if 0
-
-  if (num_to_add > 0) {
-    UVBorder &border = island.borders[vert.border_index];
-    int i = 0;
-
-    {
-      UVPrimitive test(0);
-      test.edges[0].vertices[0].uv = border.verts[vert.index].uv;
-      test.edges[0].vertices[1].uv = border.verts[vert.next_index].uv;
-      test.edges[1].vertices[0].uv = border.verts[vert.next_index].uv;
-      test.edges[1].vertices[1].uv = border.verts[vert.prev_index].uv;
-      test.edges[2].vertices[0].uv = border.verts[vert.prev_index].uv;
-      test.edges[2].vertices[1].uv = border.verts[vert.index].uv;
-      // island.primitives.append(test);
-      // return;
-    }
-    FanTri *prev_tri = &fan.tris.last();
-    for (int tri_index = 0; tri_index < fan.tris.size(); tri_index++) {
-      FanTri &tri = fan.tris[tri_index];
-      if (tri.flags.found) {
-        prev_tri = &tri;
-        continue;
-      }
-      float factor = float(i + 1) / float(num_to_add + 1);
-      float2 new_pos;
-      interp_v2_v2v2(
-          new_pos, border.verts[vert.prev_index].uv, border.verts[vert.next_index].uv, factor);
-      print_v2_id(new_pos);
-      // TODO change length of edge.
-
-      tri.uvs[1] = new_pos;
-      prev_tri->uvs[2] = new_pos;
-      tri.flags.should_be_added = true;
-      prev_tri->flags.should_be_added = true;
-
-      i++;
-      prev_tri = &tri;
-    }
-    print(fan);
-
-    for (FanTri &tri : fan.tris) {
-      if (!tri.flags.should_be_added) {
-        continue;
-      }
-      /*
-      UVPrimitive prim(tri.prim_index);
-      prim.edges[0].vertices[0].uv = tri.uvs[0];
-      prim.edges[0].vertices[1].uv = tri.uvs[1];
-      prim.edges[1].vertices[0].uv = tri.uvs[1];
-      prim.edges[1].vertices[1].uv = tri.uvs[2];
-      prim.edges[2].vertices[0].uv = tri.uvs[2];
-      prim.edges[2].vertices[1].uv = tri.uvs[0];
-
-      // prim.edges[0].adjacent_uv_primitive = prev_tri.uv_prim_index;
-      // prim.edges[1].adjacent_uv_primitive = next_tri.uv_prim_index;
-      island.primitives.append(prim);
-      */
-    }
-  }
-  else {
-    // TODO duplicate tris or fill tri.
-    // Currently we only do the duplication.
-    /*
-    UVBorder &border = island.borders[vert.border_index];
-
-    float2 center_uv = (border.verts[vert.next_index].uv + border.verts[vert.prev_index].uv) /
-                       2.0f;
-    UVPrimitive prim1(0);
-    prim1.edges[0].vertices[0].uv = border.verts[vert.index].uv;
-    prim1.edges[0].vertices[1].uv = border.verts[vert.prev_index].uv;
-    prim1.edges[1].vertices[0].uv = border.verts[vert.prev_index].uv;
-    prim1.edges[1].vertices[1].uv = center_uv;
-    prim1.edges[2].vertices[0].uv = center_uv;
-    prim1.edges[2].vertices[1].uv = border.verts[vert.index].uv;
-    island.uv_primitives.append(prim1);
-
-    UVPrimitive prim2(0);
-    prim2.edges[0].vertices[0].uv = border.verts[vert.index].uv;
-    prim2.edges[0].vertices[1].uv = center_uv;
-    prim2.edges[1].vertices[0].uv = center_uv;
-    prim2.edges[1].vertices[1].uv = border.verts[vert.next_index].uv;
-    prim2.edges[2].vertices[0].uv = border.verts[vert.next_index].uv;
-    prim2.edges[2].vertices[1].uv = border.verts[vert.index].uv;
-    island.uv_primitives.append(prim2);
-
-    vert.uv = center_uv;
-    */
-  }
-
-  // count fan-sections between border edges.
-  // 0 : split in half.
-#endif
 }
 
 void UVIsland::extend_border(const UVIslandsMask &mask,
@@ -664,6 +587,20 @@ void svg(std::ostream &ss, const UVIsland &island, int step)
     }
   }
   ss << "     </g>\n";
+
+  /* Mark Border corners that can be extended. */
+  for (const UVBorder &border : island.borders) {
+    ss << "    <g fill=\"green\">\n";
+    for (const UVBorderEdge &edge : border.edges) {
+      if (edge.flags.extendable) {
+        const UVVertex *uv_vertex = edge.get_uv_vertex(0);
+        ss << "<circle cx=\"" << svg_x(*uv_vertex) << "\"";
+        ss << " cy=\"" << svg_y(*uv_vertex) << "\"";
+        ss << " r=\"3\" />\n";
+      }
+    }
+    ss << "     </g>\n";
+  }
 
   ss << "   </g>\n";
 

@@ -286,6 +286,21 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
     }
   }
   else {
+    UVEdge *current_edge = corner.first->edge;
+    FanSegment *last_added = nullptr;
+    for (int i = 0; i < num_to_add + 1; i++) {
+      float factor = (i + 1.0f) / (num_to_add + 1.0f);
+      float2 new_uv = corner.uv(factor);
+
+      // Find an segment that contains the 'current edge'.
+      for (FanSegment &segment : fan.segments) {
+        if (!segment.flags.should_be_added) {
+          continue;
+        }
+
+        last_added = &segment;
+      }
+    }
   }
 }
 

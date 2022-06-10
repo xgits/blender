@@ -219,7 +219,7 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
     float2 center_uv = corner.uv(0.5f);
     // no new triangles found. In this case we should extend the existing borders.
     UVVertex center_vertex;
-    center_vertex.loop = uv_vertex->loop;
+    center_vertex.loop = -1;
     center_vertex.uv = center_uv;
     center_vertex.uv_edges.clear();
     {
@@ -244,14 +244,7 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
       prim1.append_to_uv_edges();
       prim1.append_to_uv_vertices();
       island.uv_primitives.append(prim1);
-
-      /* Update border */
-      UVPrimitive &new_prim = island.uv_primitives.last();
-      UVEdge *new_edge = new_prim.edges[1];
-      UVBorderEdge *border_edge = corner.first;
-      border_edge->uv_primitive = &new_prim;
-      border_edge->edge = new_edge;
-      border_edge->reverse_order = new_edge->vertices[0]->uv == center_vertex_ptr->uv;
+      island.validate_primitive(island.uv_primitives.last());
     }
     {
       MeshPrimitive *mesh_primitive = corner.first->uv_primitive->primitive;
@@ -275,14 +268,27 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
       prim1.append_to_uv_edges();
       prim1.append_to_uv_vertices();
       island.uv_primitives.append(prim1);
+      island.validate_primitive(island.uv_primitives.last());
+    }
 
-      /* Update border */
-      UVPrimitive &new_prim = island.uv_primitives.last();
-      UVEdge *new_edge = new_prim.edges[1];
-      UVBorderEdge *border_edge = corner.second;
-      border_edge->uv_primitive = &new_prim;
-      border_edge->edge = new_edge;
-      border_edge->reverse_order = new_edge->vertices[1]->uv == center_vertex_ptr->uv;
+    /* Update border after adding the new geometry. */
+    {
+      {
+        UVPrimitive &new_prim = island.uv_primitives[island.uv_primitives.size() - 2];
+        UVEdge *new_edge = new_prim.edges[1];
+        UVBorderEdge *border_edge = corner.first;
+        border_edge->uv_primitive = &new_prim;
+        border_edge->edge = new_edge;
+        border_edge->reverse_order = new_edge->vertices[0]->uv == center_uv;
+      }
+      {
+        UVPrimitive &new_prim = island.uv_primitives[island.uv_primitives.size() - 1];
+        UVEdge *new_edge = new_prim.edges[2];
+        UVBorderEdge *border_edge = corner.second;
+        border_edge->uv_primitive = &new_prim;
+        border_edge->edge = new_edge;
+        border_edge->reverse_order = new_edge->vertices[1]->uv == center_uv;
+      }
     }
   }
   else {
@@ -323,8 +329,13 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
     border.update_indexes(border_index++);
   }
 
-  int i = 4;
-  while (i) {
+  // Debug setting to reduce the extension to a number of iterations as long as not all corner
+  // cases have been implemented.
+  int num_iterations = 5;
+  while (num_iterations) {
+    if (num_iterations == 1) {
+      printf("");
+    }
     std::optional<UVBorderCorner> extension_corner = sharpest_border_corner(*this);
     if (!extension_corner.has_value()) {
       break;
@@ -338,10 +349,11 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
 
     // TODO: extend
     extend_at_vert(*this, *extension_corner, mesh_data);
+    validate_border();
 
     /* Mark that the vert is extended. Unable to extend twice. */
     extension_corner->second->flags.extendable = false;
-    i--;
+    num_iterations--;
 #ifdef DEBUG_SVG
     svg(of, *this, step++);
 #endif
@@ -425,6 +437,22 @@ void UVBorder::update_indexes(uint64_t border_index)
     edges[i].index = i;
     edges[i].next_index = next;
     edges[i].border_index = border_index;
+  }
+}
+
+void UVBorder::validate() const
+{
+  for (const UVBorderEdge &edge : edges) {
+    float2 uv1 = edge.get_uv_vertex(0)->uv;
+    float2 uv2 = edge.get_uv_vertex(1)->uv;
+    std::cout << uv1;
+    std::cout << "->";
+    std::cout << uv2;
+    std::cout << "\n";
+  }
+  for (const UVBorderEdge &edge : edges) {
+    BLI_assert(edges[edge.prev_index].get_uv_vertex(1)->uv == edge.get_uv_vertex(0)->uv);
+    BLI_assert(edge.get_uv_vertex(1)->uv == edges[edge.next_index].get_uv_vertex(0)->uv);
   }
 }
 

@@ -75,6 +75,8 @@ struct MeshPrimitive {
 
   MeshUVVert *get_other_uv_vertex(const MeshVertex *v1, const MeshVertex *v2)
   {
+    BLI_assert(vertices[0].vertex == v1 || vertices[1].vertex == v1 || vertices[2].vertex == v1);
+    BLI_assert(vertices[0].vertex == v2 || vertices[1].vertex == v2 || vertices[2].vertex == v2);
     for (MeshUVVert &uv_vertex : vertices) {
       if (uv_vertex.vertex != v1 && uv_vertex.vertex != v2) {
         return &uv_vertex;
@@ -396,6 +398,8 @@ struct UVBorder {
   void update_indexes(uint64_t border_index);
 
   static std::optional<UVBorder> extract_from_edges(Vector<UVBorderEdge> &edges);
+
+  void validate() const;
 };
 
 struct UVIsland {
@@ -525,6 +529,51 @@ struct UVIsland {
   {
     for (const UVPrimitive &other_prim : other.uv_primitives) {
       append(other_prim);
+    }
+  }
+
+  void validate_primitives() const
+  {
+    /* Each UVPrimitive that points to the same mesh primitive should contain the same mesh
+     * vertices (and can be retrieved in the same order). */
+    for (const UVPrimitive &prim_a : uv_primitives) {
+      validate_primitive(prim_a);
+    }
+  }
+  void validate_primitive(const UVPrimitive &prim_a) const
+  {
+    /* Each UVPrimitive that points to the same mesh primitive should contain the same mesh
+     * vertices (and can be retrieved in the same order). */
+    for (const UVPrimitive &prim_b : uv_primitives) {
+      if (prim_a.primitive != prim_b.primitive) {
+        continue;
+      }
+      for (int i = 0; i < 3; i++) {
+        const UVVertex *v1 = prim_a.get_uv_vertex(i);
+        const UVVertex *v2 = prim_b.get_uv_vertex(i);
+        BLI_assert(v1->vertex->v == v2->vertex->v);
+      }
+    }
+  }
+
+  void validate_border() const
+  {
+    /* Each UVPrimitive that points to the same mesh primitive should contain the same mesh
+     * vertices (and can be retrieved in the same order). */
+    for (const UVPrimitive &prim_a : uv_primitives) {
+      for (const UVPrimitive &prim_b : uv_primitives) {
+        if (prim_a.primitive != prim_b.primitive) {
+          continue;
+        }
+        for (int i = 0; i < 3; i++) {
+          const UVVertex *v1 = prim_a.get_uv_vertex(i);
+          const UVVertex *v2 = prim_b.get_uv_vertex(i);
+          BLI_assert(v1->vertex->v == v2->vertex->v);
+        }
+      }
+    }
+    for (const UVBorder &border : borders) {
+      border.validate();
     }
   }
 };

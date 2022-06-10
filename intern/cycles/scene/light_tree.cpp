@@ -54,15 +54,15 @@ OrientationBounds merge(const OrientationBounds& cone_a,
 }
 
 /* to-do: right now, this is assuming that the primitive is a point light.
-/* The plan is to progressively add support for more primitives. 
-/* Some of the logic is different from the past GSoC work, so 
-/* will have to see which logic is more correct. */
+ * The plan is to progressively add support for more primitives. 
+ * Some of the logic is different from the past GSoC work, so 
+ * will have to see which logic is more correct. */
 BoundBox LightTreePrimitive::calculate_bbox(Scene *scene) const
 {
   BoundBox bbox = BoundBox::empty;
   Light *lamp = scene->lights[lamp_id];
   /* A point light should occupy no space, but the bounding box
-  /* should at least contain the position of the point. */
+   * should at least contain the position of the point. */
   bbox.grow(lamp->get_co());
   return bbox;
 }
@@ -178,7 +178,7 @@ LightTreeBuildNode *LightTree::recursive_build(vector<LightTreePrimitiveInfo> &p
   }
   else {
     /* Find the best place to split the primitives into 2 nodes. 
-    /* If the best split cost is no better than making a leaf node, make a leaf instead.*/
+     * If the best split cost is no better than making a leaf node, make a leaf instead.*/
     float min_cost;
     int min_dim, min_bucket;
     split_saoh(centroid_bounds,
@@ -192,9 +192,9 @@ LightTreeBuildNode *LightTree::recursive_build(vector<LightTreePrimitiveInfo> &p
                min_bucket);
     if (num_prims > max_lights_in_leaf_ || min_cost < energy_total) {
       /* Partition the primitives between start and end into the appropriate split,
-      /* based on the minimum dimension and minimum bucket returned from split_saoh. 
-      /* This is an O(n) algorithm where we iterate from the left and right side,
-      /* and swaps the appropriate left and right elements until complete. */
+       * based on the minimum dimension and minimum bucket returned from split_saoh. 
+       * This is an O(n) algorithm where we iterate from the left and right side,
+       * and swaps the appropriate left and right elements until complete. */
       int left = start, right = end - 1;
       float bounding_dimension = min_bucket * (centroid_bounds.size()[min_dim] /
                                                LightTreeBucketInfo::num_buckets) +
@@ -215,8 +215,8 @@ LightTreeBuildNode *LightTree::recursive_build(vector<LightTreePrimitiveInfo> &p
         }
       }
 
-      /* At this point, we should expect right to be just past left, */
-      /* where left points to the first element that belongs to the right node. */
+      /* At this point, we should expect right to be just past left,
+       * where left points to the first element that belongs to the right node. */
       LightTreeBuildNode *left_node = recursive_build(
           primitive_info, start, left, total_nodes, ordered_prims);
       LightTreeBuildNode *right_node = recursive_build(
@@ -262,7 +262,7 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
       const LightTreePrimitiveInfo &primitive = primitive_info[i];
 
       /* Place primitive into the appropriate bucket,
-      /* where the centroid box is split into equal partitions. */
+       * where the centroid box is split into equal partitions. */
       int bucket_idx = LightTreeBucketInfo::num_buckets *
                        (primitive.centroid[dim] - centroid_bbox.min[dim]) * inv_extent;
       if (bucket_idx == LightTreeBucketInfo::num_buckets)
@@ -295,7 +295,7 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
         bcone_L = merge(bcone_L, buckets[left].bcone);
       }
 
-      for (int right = split + 1; right < num_buckets; right++) {
+      for (int right = split + 1; right < LightTreeBucketInfo::num_buckets; right++) {
         energy_R += buckets[right].energy;
         bbox_R.grow(buckets[right].bbox);
         bcone_R = merge(bcone_R, buckets[right].bcone);
@@ -325,7 +325,7 @@ int LightTree::flatten_tree(const LightTreeBuildNode *node, int &offset)
   offset++;
 
   /* If current node contains lights, then it is a leaf node.
-  /* Otherwise, create interior node and children recursively.  */
+   * Otherwise, create interior node and children recursively. */
   if (node->num_lights > 0) {
     current_node->first_prim_index = node->first_prim_index;
     current_node->num_lights = node->num_lights;

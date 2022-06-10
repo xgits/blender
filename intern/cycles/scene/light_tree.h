@@ -110,7 +110,6 @@ struct LightTreeBuildNode {
   uint num_lights;
   bool is_leaf;
 
-  LightTreeBuildNode();
   void init_leaf(uint offset, uint n, const BoundBox& b, const OrientationBounds& c, float e, float e_var);
   void init_interior(LightTreeBuildNode* c0, LightTreeBuildNode* c1);
 };
@@ -142,10 +141,6 @@ public:
   LightTree(const vector<LightTreePrimitive> &prims, Scene *scene, uint max_lights_in_leaf);
 
 private:
-  BoundBox calculate_bbox(const LightTreePrimitive& prim) const;
-  OrientationBounds calculate_bcone(const LightTreePrimitive &prim) const;
-  float calculate_energy(const LightTreePrimitive &prim) const;
-
   LightTreeBuildNode* recursive_build(vector<LightTreePrimitiveInfo> &primitive_info, int start, int end, int &total_nodes, vector<LightTreePrimitive> &ordered_prims);
   void split_saoh(const BoundBox &centroid_bounds,
                   const vector<LightTreePrimitiveInfo> &primitive_info, int start, int end, const BoundBox &bbox, const OrientationBounds &bcone, float& min_cost, int& min_dim, int& min_bucket);
@@ -154,7 +149,6 @@ private:
   
 };
 
-
-#endif
-
 CCL_NAMESPACE_END
+
+#endif /* __LIGHT_TREE_H__ */

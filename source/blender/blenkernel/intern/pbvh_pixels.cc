@@ -35,9 +35,8 @@ constexpr bool USE_WATERTIGHT_CHECK = true;
  * \{ */
 
 /** Build UV islands from PBVH primitives. */
-static uv_islands::UVIslands build_uv_islands(const PBVH &pbvh, const MLoopUV *mloopuv)
+static uv_islands::UVIslands build_uv_islands(uv_islands::MeshData &mesh_data)
 {
-  uv_islands::MeshData mesh_data(pbvh.looptri, pbvh.totprim, pbvh.totvert, pbvh.mloop, mloopuv);
   uv_islands::UVIslands islands(mesh_data);
   uv_islands::UVIslandsMask uv_masks(float2(0.0, 0.0), ushort2(256, 256));
   uv_masks.add(islands);
@@ -77,7 +76,7 @@ static float2 calc_barycentric_delta_x(const ImBuf *image_buffer,
 
 static void extract_barycentric_pixels(UDIMTilePixels &tile_data,
                                        const ImBuf *image_buffer,
-                                       const int triangle_index,
+                                       const int64_t uv_primitive_index,
                                        const float2 uvs[3],
                                        const int minx,
                                        const int miny,
@@ -87,7 +86,7 @@ static void extract_barycentric_pixels(UDIMTilePixels &tile_data,
   for (int y = miny; y < maxy; y++) {
     bool start_detected = false;
     PackedPixelRow pixel_row;
-    pixel_row.triangle_index = triangle_index;
+    pixel_row.uv_primitive_index = uv_primitive_index;
     pixel_row.num_pixels = 0;
     int x;
 
@@ -115,12 +114,15 @@ static void extract_barycentric_pixels(UDIMTilePixels &tile_data,
   }
 }
 
-static void init_triangles(PBVH *pbvh, PBVHNode *node, NodeData *node_data, const MLoop *mloop)
+/** Update the geometry primitives of the pbvh. */
+static void update_geom_primitives(PBVH &pbvh, const uv_islands::MeshData &mesh_data)
 {
-  for (int i = 0; i < node->totprim; i++) {
-    const MLoopTri *lt = &pbvh->looptri[node->prim_indices[i]];
-    node_data->triangles.append(
-        int3(mloop[lt->tri[0]].v, mloop[lt->tri[1]].v, mloop[lt->tri[2]].v));
+  PBVHData &pbvh_data = BKE_pbvh_pixels_data_get(pbvh);
+  pbvh_data.clear_data();
+  for (const uv_islands::MeshPrimitive &mesh_primitive : mesh_data.primitives) {
+    pbvh_data.geom_primitives.append(int3(mesh_primitive.vertices[0].vertex->v,
+                                          mesh_primitive.vertices[1].vertex->v,
+                                          mesh_primitive.vertices[2].vertex->v));
   }
 }
 
@@ -154,50 +156,43 @@ static void do_encode_pixels(void *__restrict userdata,
     float2 tile_offset = float2(image_tile.get_tile_offset());
     UDIMTilePixels tile_data;
 
-    Triangles &triangles = node_data->triangles;
-    for (int triangle_index = 0; triangle_index < triangles.size(); triangle_index++) {
-      int mesh_prim_index = node->prim_indices[triangle_index];
+    for (int pbvh_node_prim_index = 0; pbvh_node_prim_index < node->totprim;
+         pbvh_node_prim_index++) {
+      int64_t geom_prim_index = node->prim_indices[pbvh_node_prim_index];
       for (const uv_islands::UVIsland &island : data->uv_islands->islands) {
         for (const uv_islands::UVPrimitive &uv_primitive : island.uv_primitives) {
-          if (uv_primitive.primitive->index == mesh_prim_index) {
-            float2 uvs[3] = {
-                uv_primitive.edges[0]->vertices[0]->uv - tile_offset,
-                uv_primitive.edges[1]->vertices[0]->uv - tile_offset,
-                uv_primitive.edges[2]->vertices[0]->uv - tile_offset,
-            };
-            const float minv = clamp_f(min_fff(uvs[0].y, uvs[1].y, uvs[2].y), 0.0f, 1.0f);
-            const int miny = floor(minv * image_buffer->y);
-            const float maxv = clamp_f(max_fff(uvs[0].y, uvs[1].y, uvs[2].y), 0.0f, 1.0f);
-            const int maxy = min_ii(ceil(maxv * image_buffer->y), image_buffer->y);
-            const float minu = clamp_f(min_fff(uvs[0].x, uvs[1].x, uvs[2].x), 0.0f, 1.0f);
-            const int minx = floor(minu * image_buffer->x);
-            const float maxu = clamp_f(max_fff(uvs[0].x, uvs[1].x, uvs[2].x), 0.0f, 1.0f);
-            const int maxx = min_ii(ceil(maxu * image_buffer->x), image_buffer->x);
+          if (uv_primitive.primitive->index != geom_prim_index) {
+            continue;
           }
+          float2 uvs[3] = {
+              uv_primitive.edges[0]->vertices[0]->uv - tile_offset,
+              uv_primitive.edges[1]->vertices[0]->uv - tile_offset,
+              uv_primitive.edges[2]->vertices[0]->uv - tile_offset,
+          };
+          const float minv = clamp_f(min_fff(uvs[0].y, uvs[1].y, uvs[2].y), 0.0f, 1.0f);
+          const int miny = floor(minv * image_buffer->y);
+          const float maxv = clamp_f(max_fff(uvs[0].y, uvs[1].y, uvs[2].y), 0.0f, 1.0f);
+          const int maxy = min_ii(ceil(maxv * image_buffer->y), image_buffer->y);
+          const float minu = clamp_f(min_fff(uvs[0].x, uvs[1].x, uvs[2].x), 0.0f, 1.0f);
+          const int minx = floor(minu * image_buffer->x);
+          const float maxu = clamp_f(max_fff(uvs[0].x, uvs[1].x, uvs[2].x), 0.0f, 1.0f);
+          const int maxx = min_ii(ceil(maxu * image_buffer->x), image_buffer->x);
+
+          /* TODO: Perform bounds check */
+          int64_t uv_prim_index = node_data->uv_primitives.size();
+          node_data->uv_primitives.append(geom_prim_index);
+          UVPrimitivePaintInput &paint_input = node_data->uv_primitives.last();
+
+          /* Calculate barycentric delta */
+          paint_input.delta_barycentric_coord_u = calc_barycentric_delta_x(
+              image_buffer, uvs, minx, miny);
+
+          /* Extract the pixels. */
+          extract_barycentric_pixels(
+              tile_data, image_buffer, uv_prim_index, uvs, minx, miny, maxx, maxy);
         }
       }
-      const MLoopTri *lt = &pbvh->looptri[node->prim_indices[triangle_index]];
-      float2 uvs[3] = {
-          float2(data->ldata_uv[lt->tri[0]].uv) - tile_offset,
-          float2(data->ldata_uv[lt->tri[1]].uv) - tile_offset,
-          float2(data->ldata_uv[lt->tri[2]].uv) - tile_offset,
-      };
-
-      const float minv = clamp_f(min_fff(uvs[0].y, uvs[1].y, uvs[2].y), 0.0f, 1.0f);
-      const int miny = floor(minv * image_buffer->y);
-      const float maxv = clamp_f(max_fff(uvs[0].y, uvs[1].y, uvs[2].y), 0.0f, 1.0f);
-      const int maxy = min_ii(ceil(maxv * image_buffer->y), image_buffer->y);
-      const float minu = clamp_f(min_fff(uvs[0].x, uvs[1].x, uvs[2].x), 0.0f, 1.0f);
-      const int minx = floor(minu * image_buffer->x);
-      const float maxu = clamp_f(max_fff(uvs[0].x, uvs[1].x, uvs[2].x), 0.0f, 1.0f);
-      const int maxx = min_ii(ceil(maxu * image_buffer->x), image_buffer->x);
-
-      TrianglePaintInput &triangle = triangles.get_paint_input(triangle_index);
-      triangle.delta_barycentric_coord_u = calc_barycentric_delta_x(image_buffer, uvs, minx, miny);
-      extract_barycentric_pixels(
-          tile_data, image_buffer, triangle_index, uvs, minx, miny, maxx, maxy);
     }
-
     BKE_image_release_ibuf(image, image_buffer, nullptr);
 
     if (tile_data.pixel_rows.is_empty()) {
@@ -340,13 +335,10 @@ static void update_pixels(PBVH *pbvh, Mesh *mesh, Image *image, ImageUser *image
   if (ldata_uv == nullptr) {
     return;
   }
-
-  for (PBVHNode *node : nodes_to_update) {
-    NodeData *node_data = static_cast<NodeData *>(node->pixels.node_data);
-    init_triangles(pbvh, node, node_data, mesh->mloop);
-  }
-
-  uv_islands::UVIslands islands = build_uv_islands(*pbvh, ldata_uv);
+  uv_islands::MeshData mesh_data(
+      pbvh->looptri, pbvh->totprim, pbvh->totvert, pbvh->mloop, ldata_uv);
+  uv_islands::UVIslands islands = build_uv_islands(mesh_data);
+  update_geom_primitives(*pbvh, mesh_data);
 
   EncodePixelsUserData user_data;
   user_data.pbvh = pbvh;

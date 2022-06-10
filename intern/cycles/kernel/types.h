@@ -1489,6 +1489,33 @@ typedef struct KernelLightDistribution {
 } KernelLightDistribution;
 static_assert_align(KernelLightDistribution, 16);
 
+typedef struct KernelLightTreeNode {
+  /* Bounding box. */
+  float bounding_box_min[3];
+  float bounding_box_max[3];
+
+  /* Bounding cone. */
+  float bounding_cone_axis[3];
+  float theta_o;
+  float theta_e;
+
+  /* Energy. */
+  float energy;
+
+  /* If this is 0 or less, we're at a leaf node
+   * and the negative value indexes into the first child of the light array.
+   * Otherwise, it's an index to the node's second child. */
+  int child_index;
+  union {
+    int num_prims; /* leaf nodes need to know the number of primitives stored. */
+    float energy_variance; /* interior nodes use the energy variance for the splitting heuristic. */
+  };
+
+  /* Padding. */
+  int pad1, pad2;
+} KernelLightTreeNode;
+static_assert_align(KernelLightTreeNode, 16);
+
 typedef struct KernelParticle {
   int index;
   float age;

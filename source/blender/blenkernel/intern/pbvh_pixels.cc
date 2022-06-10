@@ -27,7 +27,7 @@ namespace blender::bke::pbvh::pixels {
  * During debugging this check could be enabled.
  * It will write to each image pixel that is covered by the PBVH.
  */
-constexpr bool USE_WATERTIGHT_CHECK = true;
+constexpr bool USE_WATERTIGHT_CHECK = false;
 
 /* -------------------------------------------------------------------- */
 
@@ -142,7 +142,6 @@ static void do_encode_pixels(void *__restrict userdata,
   EncodePixelsUserData *data = static_cast<EncodePixelsUserData *>(userdata);
   Image *image = data->image;
   ImageUser image_user = *data->image_user;
-  PBVH *pbvh = data->pbvh;
   PBVHNode *node = (*data->nodes)[n];
   NodeData *node_data = static_cast<NodeData *>(node->pixels.node_data);
   LISTBASE_FOREACH (ImageTile *, tile, &data->image->tiles) {
@@ -153,8 +152,9 @@ static void do_encode_pixels(void *__restrict userdata,
       continue;
     }
 
-    float2 tile_offset = float2(image_tile.get_tile_offset());
     UDIMTilePixels tile_data;
+    tile_data.tile_number = image_tile.get_tile_number();
+    float2 tile_offset = float2(image_tile.get_tile_offset());
 
     for (int pbvh_node_prim_index = 0; pbvh_node_prim_index < node->totprim;
          pbvh_node_prim_index++) {
@@ -164,10 +164,11 @@ static void do_encode_pixels(void *__restrict userdata,
           if (uv_primitive.primitive->index != geom_prim_index) {
             continue;
           }
+          uv_islands::UVBorder uv_border = uv_primitive.extract_border();
           float2 uvs[3] = {
-              uv_primitive.edges[0]->vertices[0]->uv - tile_offset,
-              uv_primitive.edges[1]->vertices[0]->uv - tile_offset,
-              uv_primitive.edges[2]->vertices[0]->uv - tile_offset,
+              uv_primitive.get_uv_vertex(0)->uv - tile_offset,
+              uv_primitive.get_uv_vertex(1)->uv - tile_offset,
+              uv_primitive.get_uv_vertex(2)->uv - tile_offset,
           };
           const float minv = clamp_f(min_fff(uvs[0].y, uvs[1].y, uvs[2].y), 0.0f, 1.0f);
           const int miny = floor(minv * image_buffer->y);
@@ -199,7 +200,6 @@ static void do_encode_pixels(void *__restrict userdata,
       continue;
     }
 
-    tile_data.tile_number = image_tile.get_tile_number();
     node_data->tiles.append(tile_data);
   }
 }

@@ -296,6 +296,23 @@ struct UVPrimitive {
     return false;
   }
 
+  /**
+   * Get the UVVertex in the order that the verts are ordered in the MeshPrimitive.
+   */
+  const UVVertex *get_uv_vertex(const uint8_t mesh_vert_index) const
+  {
+    const MeshVertex *mesh_vertex = primitive->vertices[mesh_vert_index].vertex;
+    for (const UVEdge *uv_edge : edges) {
+      for (const UVVertex *uv_vert : uv_edge->vertices) {
+        if (uv_vert->vertex == mesh_vertex) {
+          return uv_vert;
+        }
+      }
+    }
+    BLI_assert_unreachable();
+    return nullptr;
+  }
+
   UVBorder extract_border() const;
 };
 

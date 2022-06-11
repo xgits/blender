@@ -48,8 +48,8 @@
 
 #include "bmesh.h"
 
-#include <math.h>
-#include <stdlib.h>
+#include <cmath>
+#include <cstdlib>
 
 using blender::IndexRange;
 using blender::Set;
@@ -63,7 +63,7 @@ AutomaskingCache *SCULPT_automasking_active_cache_get(SculptSession *ss)
   if (ss->filter_cache) {
     return ss->filter_cache->automasking;
   }
-  return NULL;
+  return nullptr;
 }
 
 bool SCULPT_is_automasking_mode_enabled(const Sculpt *sd,
@@ -368,13 +368,13 @@ static bool sculpt_automasking_is_constrained_by_radius(Brush *br)
   return false;
 }
 
-typedef struct AutomaskFloodFillData {
+struct AutomaskFloodFillData {
   float *automask_factor;
   float radius;
   bool use_radius;
   float location[3];
   char symm;
-} AutomaskFloodFillData;
+};
 
 static bool automask_floodfill_cb(
     SculptSession *ss, int from_v, int to_v, bool UNUSED(is_duplicate), void *userdata)
@@ -395,7 +395,7 @@ static float *SCULPT_topology_automasking_init(Sculpt *sd, Object *ob, float *au
 
   if (BKE_pbvh_type(ss->pbvh) == PBVH_FACES && !ss->pmap) {
     BLI_assert_msg(0, "Topology masking: pmap missing");
-    return NULL;
+    return nullptr;
   }
 
   const int totvert = SCULPT_vertex_count_get(ss);
@@ -410,7 +410,7 @@ static float *SCULPT_topology_automasking_init(Sculpt *sd, Object *ob, float *au
   const float radius = ss->cache ? ss->cache->radius : FLT_MAX;
   SCULPT_floodfill_add_active(sd, ob, ss, &flood, radius);
 
-  AutomaskFloodFillData fdata = {0};
+  AutomaskFloodFillData fdata = {nullptr};
 
   fdata.automask_factor = automask_factor;
   fdata.radius = radius;
@@ -430,12 +430,12 @@ static float *sculpt_face_sets_automasking_init(Sculpt *sd, Object *ob, float *a
   Brush *brush = BKE_paint_brush(&sd->paint);
 
   if (!SCULPT_is_automasking_enabled(sd, ss, brush)) {
-    return NULL;
+    return nullptr;
   }
 
   if (BKE_pbvh_type(ss->pbvh) == PBVH_FACES && !ss->pmap) {
     BLI_assert_msg(0, "Face Sets automasking: pmap missing");
-    return NULL;
+    return nullptr;
   }
 
   int tot_vert = SCULPT_vertex_count_get(ss);
@@ -535,7 +535,7 @@ float *SCULPT_boundary_automasking_init(Object *ob,
 
   if (!ss->pmap) {
     BLI_assert_msg(0, "Boundary Edges masking: pmap missing");
-    return NULL;
+    return nullptr;
   }
 
   const int totvert = SCULPT_vertex_count_get(ss);
@@ -603,7 +603,7 @@ AutomaskingCache *SCULPT_automasking_cache_init(Sculpt *sd, Brush *brush, Object
   const int totvert = SCULPT_vertex_count_get(ss);
 
   if (!SCULPT_is_automasking_enabled(sd, ss, brush)) {
-    return NULL;
+    return nullptr;
   }
 
   AutomaskingCache *automasking = (AutomaskingCache *)MEM_callocN(sizeof(AutomaskingCache),

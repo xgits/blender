@@ -3141,26 +3141,6 @@ static void rna_def_brush(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Custom Cavity Curve", "Use custom curve.");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
-  prop = RNA_def_property(srna, "automasking_cavity_factor", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_float_sdna(prop, NULL, "automasking_cavity_factor");
-  RNA_def_property_ui_text(prop, "Cavity Factor", "Cavity mask factor");
-  RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.1, 3);
-  RNA_def_property_range(prop, 0.0f, 5.0f);
-  RNA_def_property_update(prop, 0, "rna_Brush_update");
-
-  prop = RNA_def_property(srna, "automasking_cavity_blur_steps", PROP_INT, PROP_NONE);
-  RNA_def_property_int_sdna(prop, NULL, "automasking_cavity_blur_steps");
-  RNA_def_property_ui_text(prop, "Blur Steps", "Cavity blur steps");
-  RNA_def_property_range(prop, 0.0f, 25.0f);
-  RNA_def_property_update(prop, 0, "rna_Brush_update");
-
-  prop = RNA_def_property(srna, "automasking_cavity_curve", PROP_POINTER, PROP_NONE);
-  RNA_def_property_pointer_sdna(prop, NULL, "automasking_cavity_curve");
-  RNA_def_property_struct_type(prop, "CurveMapping");
-  RNA_def_property_ui_text(prop, "Cavity Curve", "Curve used for the sensitivity");
-  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_update(prop, 0, "rna_Brush_update");
-
   prop = RNA_def_property(srna, "use_scene_spacing", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_bitflag_sdna(prop, NULL, "flag");
   RNA_def_property_enum_items(prop, brush_spacing_unit_items);

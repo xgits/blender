@@ -49,6 +49,7 @@ struct Palette;
 struct PaletteColor;
 struct Scene;
 struct StrokeCache;
+struct Sculpt;
 struct SubdivCCG;
 struct Tex;
 struct ToolSettings;

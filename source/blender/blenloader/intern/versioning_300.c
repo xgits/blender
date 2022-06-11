@@ -3022,9 +3022,11 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
-  if (!DNA_struct_elem_find(fd->filesdna, "Brush", "float", "automasking_cavity_factor")) {
-    LISTBASE_FOREACH (Brush *, brush, &bmain->brushes) {
-      brush->automasking_cavity_factor = 0.5f;
+  if (!DNA_struct_elem_find(fd->filesdna, "Sculpt", "float", "automasking_cavity_factor")) {
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      if (scene->toolsettings && scene->toolsettings->sculpt) {
+        scene->toolsettings->sculpt->automasking_cavity_factor = 0.5f;
+      }
     }
   }
 

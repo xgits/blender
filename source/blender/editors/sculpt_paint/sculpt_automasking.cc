@@ -592,9 +592,9 @@ static void SCULPT_automasking_cache_settings_update(AutomaskingCache *automaski
 {
   automasking->settings.flags = sculpt_automasking_mode_effective_bits(sd, brush);
   automasking->settings.initial_face_set = SCULPT_active_face_set_get(ss);
-  automasking->settings.cavity_factor = brush->automasking_cavity_factor;
-  automasking->settings.cavity_blur_steps = brush->automasking_cavity_blur_steps;
-  automasking->settings.cavity_curve = brush->automasking_cavity_curve;
+  automasking->settings.cavity_factor = sd->automasking_cavity_factor;
+  automasking->settings.cavity_blur_steps = sd->automasking_cavity_blur_steps;
+  automasking->settings.cavity_curve = sd->automasking_cavity_curve;
 }
 
 AutomaskingCache *SCULPT_automasking_cache_init(Sculpt *sd, Brush *brush, Object *ob)

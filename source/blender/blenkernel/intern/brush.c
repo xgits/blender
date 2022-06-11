@@ -42,19 +42,6 @@
 
 #include "BLO_read_write.h"
 
-static void brush_sculpt_add_cavity_curve(Brush *br)
-
-{
-  CurveMapping *cumap = br->automasking_cavity_curve = BKE_curvemapping_add(1, 0, 0, 1, 1);
-
-  cumap->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
-  cumap->preset = CURVE_PRESET_LINE;
-
-  BKE_curvemap_reset(cumap->cm, &cumap->clipr, cumap->preset, CURVEMAP_SLOPE_POSITIVE);
-  BKE_curvemapping_changed(cumap, false);
-  BKE_curvemapping_init(br->automasking_cavity_curve);
-}
-
 static void brush_init_data(ID *id)
 {
   Brush *brush = (Brush *)id;
@@ -85,11 +72,6 @@ static void brush_copy_data(Main *UNUSED(bmain), ID *id_dst, const ID *id_src, c
   }
 
   brush_dst->curve = BKE_curvemapping_copy(brush_src->curve);
-
-  if (brush_src->automasking_cavity_curve) {
-    brush_dst->automasking_cavity_curve = BKE_curvemapping_copy(
-        brush_src->automasking_cavity_curve);
-  }
 
   if (brush_src->gpencil_settings != NULL) {
     brush_dst->gpencil_settings = MEM_dupallocN(brush_src->gpencil_settings);
@@ -128,10 +110,6 @@ static void brush_free_data(ID *id)
     IMB_freeImBuf(brush->icon_imbuf);
   }
   BKE_curvemapping_free(brush->curve);
-
-  if (brush->automasking_cavity_curve) {
-    BKE_curvemapping_free(brush->curve);
-  }
 
   if (brush->gpencil_settings != NULL) {
     BKE_curvemapping_free(brush->gpencil_settings->curve_sensitivity);
@@ -232,10 +210,6 @@ static void brush_blend_write(BlendWriter *writer, ID *id, const void *id_addres
 
   if (brush->curve) {
     BKE_curvemapping_blend_write(writer, brush->curve);
-  }
-
-  if (brush->automasking_cavity_curve) {
-    BKE_curvemapping_blend_write(writer, brush->automasking_cavity_curve);
   }
 
   if (brush->gpencil_settings) {
@@ -348,16 +322,6 @@ static void brush_blend_read_data(BlendDataReader *reader, ID *id)
 
   brush->preview = NULL;
   brush->icon_imbuf = NULL;
-
-  BLO_read_data_address(reader, &brush->automasking_cavity_curve);
-
-  if (brush->automasking_cavity_curve) {
-    BKE_curvemapping_blend_read(reader, brush->automasking_cavity_curve);
-    BKE_curvemapping_init(brush->automasking_cavity_curve);
-  }
-  else if (brush->sculpt_tool) {
-    brush_sculpt_add_cavity_curve(brush);
-  }
 }
 
 static void brush_blend_read_lib(BlendLibReader *reader, ID *id)
@@ -1978,12 +1942,6 @@ void BKE_brush_sculpt_reset(Brush *br)
     default:
       break;
   }
-
-  if (br->automasking_cavity_curve) {
-    BKE_curvemapping_free(br->automasking_cavity_curve);
-  }
-
-  brush_sculpt_add_cavity_curve(br);
 }
 
 void BKE_brush_curve_preset(Brush *b, eCurveMappingPreset preset)

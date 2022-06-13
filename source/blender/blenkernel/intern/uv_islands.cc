@@ -138,6 +138,34 @@ struct Fan {
     }
   }
 
+  int count_num_to_add() const
+  {
+    int result = 0;
+    for (const FanSegment &segment : segments) {
+      if (!segment.flags.found) {
+        result++;
+      }
+    }
+    return result;
+  }
+
+  void mark_already_added_segments(const UVVertex &uv_vertex)
+  {
+    for (FanSegment &segment : segments) {
+      segment.flags.found = false;
+      const MeshVertex *v0 = segment.primitive->vertices[segment.vert_order[0]].vertex;
+      const MeshVertex *v1 = segment.primitive->vertices[segment.vert_order[1]].vertex;
+      for (const UVEdge *edge : uv_vertex.uv_edges) {
+        const MeshVertex *e0 = edge->vertices[0]->vertex;
+        const MeshVertex *e1 = edge->vertices[1]->vertex;
+        if ((e0 == v0 && e1 == v1) || (e0 == v1 && e1 == v0)) {
+          segment.flags.found = true;
+          break;
+        }
+      }
+    }
+  }
+
   void init_uv_coordinates(UVVertex &uv_vertex, const UVIsland &island)
   {
     for (FanSegment &segment : segments) {
@@ -181,114 +209,99 @@ static void print(const Fan &fan)
   }
 }
 
+static void add_uv_primitive_shared_uv_edge(UVIsland &island,
+                                            UVVertex *connected_vert_1,
+                                            UVVertex *connected_vert_2,
+                                            float2 uv_unconnected,
+                                            MeshPrimitive *mesh_primitive)
+{
+  UVPrimitive prim1(mesh_primitive);
+
+  MeshUVVert *other_vert = mesh_primitive->get_other_uv_vertex(connected_vert_1->vertex,
+                                                               connected_vert_2->vertex);
+  UVVertex vert_template;
+  vert_template.uv = uv_unconnected;
+  vert_template.loop = other_vert->loop;
+  vert_template.vertex = other_vert->vertex;
+  UVVertex *vert_ptr = island.lookup_or_create(vert_template, true);
+
+  const MeshUVVert *mesh_vert_1 = &mesh_primitive->get_uv_vert(connected_vert_1->vertex);
+  vert_template.uv = connected_vert_1->uv;
+  vert_template.loop = mesh_vert_1->loop;
+  vert_template.vertex = mesh_vert_1->vertex;
+  UVVertex *vert_1_ptr = island.lookup_or_create(vert_template, true);
+
+  const MeshUVVert *mesh_vert_2 = &mesh_primitive->get_uv_vert(connected_vert_2->vertex);
+  vert_template.uv = connected_vert_2->uv;
+  vert_template.loop = mesh_vert_2->loop;
+  vert_template.vertex = mesh_vert_2->vertex;
+  UVVertex *vert_2_ptr = island.lookup_or_create(vert_template, true);
+
+  UVEdge edge_template;
+  edge_template.vertices[0] = vert_1_ptr;
+  edge_template.vertices[1] = vert_2_ptr;
+  prim1.edges.append(island.lookup_or_create(edge_template, true));
+  edge_template.vertices[0] = vert_2_ptr;
+  edge_template.vertices[1] = vert_ptr;
+  prim1.edges.append(island.lookup_or_create(edge_template, true));
+  edge_template.vertices[0] = vert_ptr;
+  edge_template.vertices[1] = vert_1_ptr;
+  prim1.edges.append(island.lookup_or_create(edge_template, true));
+  prim1.append_to_uv_edges();
+  prim1.append_to_uv_vertices();
+  island.uv_primitives.append(prim1);
+  island.validate_primitive(island.uv_primitives.last());
+}
+
 static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshData &mesh_data)
 {
-  BLI_assert(corner.first->get_uv_vertex(1) == corner.second->get_uv_vertex(0));
   UVVertex *uv_vertex = corner.second->get_uv_vertex(0);
   Fan fan(*(uv_vertex->vertex));
-  print(fan);
   fan.init_uv_coordinates(*uv_vertex, island);
-  print(fan);
-
-  for (FanSegment &segment : fan.segments) {
-    segment.flags.found = false;
-    MeshVertex *v0 = segment.primitive->vertices[segment.vert_order[0]].vertex;
-    MeshVertex *v1 = segment.primitive->vertices[segment.vert_order[1]].vertex;
-    for (UVEdge *edge : uv_vertex->uv_edges) {
-      if ((edge->vertices[0]->vertex == v0 && edge->vertices[1]->vertex == v1) ||
-          (edge->vertices[0]->vertex == v1 && edge->vertices[1]->vertex == v0)) {
-        segment.flags.found = true;
-        break;
-      }
-    }
-  }
+  fan.mark_already_added_segments(*uv_vertex);
   print(fan);
 
   // tag them as being 'not fixed in uv space'. count them and determine a position in uv space.
   // add UV primitives for them.
   // recalc the border.
-  int num_to_add = 0;
-  for (FanSegment &segment : fan.segments) {
-    if (!segment.flags.found) {
-      num_to_add++;
-    }
-  }
+  int num_to_add = fan.count_num_to_add();
   printf("Found %d new edges to add\n", num_to_add);
 
   if (num_to_add == 0) {
     float2 center_uv = corner.uv(0.5f);
     // no new triangles found. In this case we should extend the existing borders.
-    UVVertex center_vertex;
-    center_vertex.loop = -1;
-    center_vertex.uv = center_uv;
-    center_vertex.uv_edges.clear();
-    {
-      MeshPrimitive *mesh_primitive = corner.second->uv_primitive->primitive;
-      UVPrimitive prim1(mesh_primitive);
-      MeshUVVert *other_uv_vert = mesh_primitive->get_other_uv_vertex(
-          corner.second->edge->vertices[0]->vertex, corner.second->edge->vertices[1]->vertex);
-      center_vertex.loop = other_uv_vert->loop;
-      center_vertex.vertex = other_uv_vert->vertex;
-
-      UVVertex *center_vertex_ptr = island.lookup_or_create(center_vertex);
-      UVEdge edge_template;
-      edge_template.vertices[0] = corner.first->get_uv_vertex(1);
-      edge_template.vertices[1] = corner.first->get_uv_vertex(0);
-      prim1.edges.append(island.lookup_or_create(edge_template));
-      edge_template.vertices[0] = corner.first->get_uv_vertex(0);
-      edge_template.vertices[1] = center_vertex_ptr;
-      prim1.edges.append(island.lookup_or_create(edge_template));
-      edge_template.vertices[0] = center_vertex_ptr;
-      edge_template.vertices[1] = corner.first->get_uv_vertex(1);
-      prim1.edges.append(island.lookup_or_create(edge_template));
-      prim1.append_to_uv_edges();
-      prim1.append_to_uv_vertices();
-      island.uv_primitives.append(prim1);
-      island.validate_primitive(island.uv_primitives.last());
-    }
-    {
-      MeshPrimitive *mesh_primitive = corner.first->uv_primitive->primitive;
-      UVPrimitive prim1(mesh_primitive);
-      MeshUVVert *other_uv_vert = mesh_primitive->get_other_uv_vertex(
-          corner.first->edge->vertices[0]->vertex, corner.first->edge->vertices[1]->vertex);
-      center_vertex.loop = other_uv_vert->loop;
-      center_vertex.vertex = other_uv_vert->vertex;
-      /* TODO: Should be reversed. */
-      UVVertex *center_vertex_ptr = island.lookup_or_create(center_vertex);
-      UVEdge edge_template;
-      edge_template.vertices[0] = corner.second->get_uv_vertex(1);
-      edge_template.vertices[1] = corner.second->get_uv_vertex(0);
-      prim1.edges.append(island.lookup_or_create(edge_template));
-      edge_template.vertices[0] = corner.second->get_uv_vertex(0);
-      edge_template.vertices[1] = center_vertex_ptr;
-      prim1.edges.append(island.lookup_or_create(edge_template));
-      edge_template.vertices[0] = center_vertex_ptr;
-      edge_template.vertices[1] = corner.second->get_uv_vertex(1);
-      prim1.edges.append(island.lookup_or_create(edge_template));
-      prim1.append_to_uv_edges();
-      prim1.append_to_uv_vertices();
-      island.uv_primitives.append(prim1);
-      island.validate_primitive(island.uv_primitives.last());
-    }
+    printf(" - add new projection for {%lld}\n", corner.second->uv_primitive->primitive->index);
+    add_uv_primitive_shared_uv_edge(island,
+                                    corner.first->get_uv_vertex(1),
+                                    corner.first->get_uv_vertex(0),
+                                    center_uv,
+                                    corner.second->uv_primitive->primitive);
+    printf(" - add new projection for {%lld}\n", corner.first->uv_primitive->primitive->index);
+    add_uv_primitive_shared_uv_edge(island,
+                                    corner.second->get_uv_vertex(0),
+                                    corner.second->get_uv_vertex(1),
+                                    center_uv,
+                                    corner.first->uv_primitive->primitive);
 
     /* Update border after adding the new geometry. */
     {
       {
         UVPrimitive &new_prim = island.uv_primitives[island.uv_primitives.size() - 2];
-        UVEdge *new_edge = new_prim.edges[1];
         UVBorderEdge *border_edge = corner.first;
         border_edge->uv_primitive = &new_prim;
-        border_edge->edge = new_edge;
-        border_edge->reverse_order = new_edge->vertices[0]->uv == center_uv;
+        border_edge->edge = border_edge->uv_primitive->get_uv_edge(
+            corner.first->get_uv_vertex(0)->uv, center_uv);
+        border_edge->reverse_order = border_edge->edge->vertices[0]->uv == center_uv;
       }
       {
         UVPrimitive &new_prim = island.uv_primitives[island.uv_primitives.size() - 1];
-        UVEdge *new_edge = new_prim.edges[2];
         UVBorderEdge *border_edge = corner.second;
         border_edge->uv_primitive = &new_prim;
-        border_edge->edge = new_edge;
-        border_edge->reverse_order = new_edge->vertices[1]->uv == center_uv;
+        border_edge->edge = border_edge->uv_primitive->get_uv_edge(
+            corner.second->get_uv_vertex(1)->uv, center_uv);
+        border_edge->reverse_order = border_edge->edge->vertices[1]->uv == center_uv;
       }
+      island.validate_border();
     }
   }
   else {
@@ -577,7 +590,7 @@ static float svg_x(const float2 &uv)
 
 static float svg_y(const float2 &uv)
 {
-  return uv.y * 1024;
+  return 1024 - uv.y * 1024;
 }
 
 static float svg_x(const UVVertex &vertex)
@@ -735,7 +748,7 @@ void svg(std::ostream &ss, const UVIslandsMask &mask, int step)
 
 void svg_coords(std::ostream &ss, const float2 &coords)
 {
-  ss << coords.x * 1024 << "," << coords.y * 1024;
+  ss << svg_x(coords) << "," << svg_y(coords);
 }
 
 void svg(std::ostream &ss, const UVPrimitive &primitive)
@@ -754,8 +767,8 @@ void svg(std::ostream &ss, const UVPrimitive &primitive)
   }
   center /= 3;
 
-  ss << "<text x=\"" << center.x * 1024 << "\"";
-  ss << " y=\"" << center.y * 1024 << "\">";
+  ss << "<text x=\"" << svg_x(center) << "\"";
+  ss << " y=\"" << svg_y(center) << "\">";
   ss << primitive.primitive->index;
 
   ss << "</text>\n";

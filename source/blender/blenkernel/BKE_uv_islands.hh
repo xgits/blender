@@ -8,6 +8,7 @@
 
 #include "BLI_array.hh"
 #include "BLI_edgehash.h"
+#include "BLI_float3x3.hh"
 #include "BLI_math.h"
 #include "BLI_math_vec_types.hh"
 #include "BLI_vector.hh"
@@ -71,6 +72,16 @@ struct MeshPrimitive {
     }
     BLI_assert_unreachable();
     return vertices[0];
+  }
+
+  bool has_vertex(const MeshVertex &v) const
+  {
+    for (int i = 0; i < 3; i++) {
+      if (vertices[i].vertex == &v) {
+        return true;
+      }
+    }
+    return false;
   }
 
   MeshUVVert *get_other_uv_vertex(const MeshVertex *v1, const MeshVertex *v2)
@@ -248,6 +259,14 @@ struct UVEdge {
       vertex->uv_edges.append_non_duplicates(this);
     }
   }
+
+  UVVertex *get_other_uv_vertex(const MeshVertex *vertex)
+  {
+    if (vertices[0]->vertex == vertex) {
+      return vertices[1];
+    }
+    return vertices[0];
+  }
 };
 
 struct UVPrimitive {
@@ -394,22 +413,25 @@ struct UVBorderEdge {
 struct UVBorderCorner {
   UVBorderEdge *first;
   UVBorderEdge *second;
+  float angle;
 
-  UVBorderCorner(UVBorderEdge *first, UVBorderEdge *second) : first(first), second(second)
+  UVBorderCorner(UVBorderEdge *first, UVBorderEdge *second, float angle)
+      : first(first), second(second), angle(angle)
   {
   }
 
   float2 uv(float factor)
   {
-    float2 linear;
-    interp_v2_v2v2(linear, first->get_uv_vertex(0)->uv, second->get_uv_vertex(1)->uv, factor);
-    float2 origin = second->get_uv_vertex(0)->uv;
+    float2 origin = first->get_uv_vertex(1)->uv;
+    float angle_between = angle * factor;
     float desired_len = second->length() * factor + first->length() * (1.0 - factor);
+    float2 v = first->get_uv_vertex(0)->uv - origin;
+    normalize_v2(v);
 
-    float2 dir = linear - origin;
-    normalize_v2(dir);
-
-    return origin + dir * desired_len;
+    float3x3 rot_mat = float3x3::from_rotation(angle_between);
+    float2 rotated = rot_mat * v;
+    float2 result = rotated * desired_len + first->get_uv_vertex(1)->uv;
+    return result;
   }
 };
 

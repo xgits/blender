@@ -41,10 +41,10 @@ static std::optional<UVBorderCorner> sharpest_border_corner(UVBorder &border, fl
     if (edge.flags.extendable == false) {
       continue;
     }
-    float new_radius = border.outside_angle(edge);
-    if (new_radius < *r_angle) {
-      *r_angle = new_radius;
-      result = UVBorderCorner(&border.edges[edge.prev_index], &edge);
+    float new_angle = border.outside_angle(edge);
+    if (new_angle < *r_angle) {
+      *r_angle = new_angle;
+      result = UVBorderCorner(&border.edges[edge.prev_index], &edge, new_angle);
     }
   }
   return result;
@@ -55,10 +55,10 @@ static std::optional<UVBorderCorner> sharpest_border_corner(UVIsland &island)
   std::optional<UVBorderCorner> result;
   float sharpest_angle = std::numeric_limits<float>::max();
   for (UVBorder &border : island.borders) {
-    float new_radius;
-    std::optional<UVBorderCorner> new_result = sharpest_border_corner(border, &new_radius);
-    if (new_radius < sharpest_angle) {
-      sharpest_angle = new_radius;
+    float new_angle;
+    std::optional<UVBorderCorner> new_result = sharpest_border_corner(border, &new_angle);
+    if (new_angle < sharpest_angle) {
+      sharpest_angle = new_angle;
       result = new_result;
     }
   }
@@ -101,6 +101,7 @@ struct FanSegment {
   }
 };
 
+// TODO: should have InnerEdges and Primitives to reduce complexity in algorithm
 struct Fan {
   /* Blades of the fan. */
   Vector<FanSegment> segments;
@@ -250,6 +251,19 @@ static void add_uv_primitive_shared_uv_edge(UVIsland &island,
   island.validate_primitive(island.uv_primitives.last());
 }
 
+static MeshPrimitive *find_fill_border(const MeshVertex &v1,
+                                       const MeshVertex &v2,
+                                       const MeshVertex &v3)
+{
+  for (MeshEdge *edge : v1.edges) {
+    for (MeshPrimitive *primitive : edge->primitives) {
+      if (primitive->has_vertex(v1) && primitive->has_vertex(v2) && primitive->has_vertex(v3)) {
+        return primitive;
+      }
+    }
+  }
+  return nullptr;
+}
 /**
  * Find a primitive that can be used to fill give corner.
  * Will return nullptr when no primitive can be found.
@@ -296,7 +310,7 @@ static void add_uv_primitive_fill(UVIsland &island,
   uv_primitive.append_to_uv_edges();
   uv_primitive.append_to_uv_vertices();
   island.uv_primitives.append(uv_primitive);
-  island.validate_primitive(island.uv_primitives.last());
+  // island.validate_primitive(island.uv_primitives.last());
 }
 
 static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshData &mesh_data)
@@ -370,19 +384,77 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
   }
   else {
     UVEdge *current_edge = corner.first->edge;
-    FanSegment *last_added = nullptr;
-    for (int i = 0; i < num_to_add + 1; i++) {
+    for (int i = 0; i < num_to_add; i++) {
+      float2 old_uv = current_edge->get_other_uv_vertex(uv_vertex->vertex)->uv;
+      MeshVertex *shared_edge_vertex =
+          current_edge->get_other_uv_vertex(uv_vertex->vertex)->vertex;
+
       float factor = (i + 1.0f) / (num_to_add + 1.0f);
       float2 new_uv = corner.uv(factor);
 
       // Find an segment that contains the 'current edge'.
       for (FanSegment &segment : fan.segments) {
-        if (!segment.flags.should_be_added) {
+        if (segment.flags.found) {
           continue;
         }
 
-        last_added = &segment;
+        // Find primitive that shares the current edge and the segment edge.
+        MeshPrimitive *fill_primitive = find_fill_border(
+            *uv_vertex->vertex,
+            *shared_edge_vertex,
+            *segment.primitive->vertices[segment.vert_order[1]].vertex);
+        if (fill_primitive == nullptr) {
+          continue;
+        }
+        MeshVertex *other_prim_vertex =
+            fill_primitive->get_other_uv_vertex(uv_vertex->vertex, shared_edge_vertex)->vertex;
+
+        UVVertex uv_vertex_template;
+        uv_vertex_template.vertex = uv_vertex->vertex;
+        uv_vertex_template.uv = uv_vertex->uv;
+        UVVertex *vertex_1_ptr = island.lookup_or_create(uv_vertex_template);
+        uv_vertex_template.vertex = shared_edge_vertex;
+        uv_vertex_template.uv = old_uv;
+        UVVertex *vertex_2_ptr = island.lookup_or_create(uv_vertex_template);
+        uv_vertex_template.vertex = other_prim_vertex;
+        uv_vertex_template.uv = new_uv;
+        UVVertex *vertex_3_ptr = island.lookup_or_create(uv_vertex_template);
+
+        add_uv_primitive_fill(
+            island, *vertex_1_ptr, *vertex_2_ptr, *vertex_3_ptr, *fill_primitive);
+
+        segment.flags.found = true;
+
+        /* TODO: should be done based on meshvertex */
+        UVPrimitive &new_prim = island.uv_primitives[island.uv_primitives.size() - 1];
+        current_edge = new_prim.get_uv_edge(uv_vertex->uv, new_uv);
+
+        break;
       }
+    }
+
+    {
+      /* Add final segment. */
+      float2 old_uv = current_edge->get_other_uv_vertex(uv_vertex->vertex)->uv;
+      MeshVertex *shared_edge_vertex =
+          current_edge->get_other_uv_vertex(uv_vertex->vertex)->vertex;
+      MeshPrimitive *fill_primitive = find_fill_border(
+          *uv_vertex->vertex, *shared_edge_vertex, *corner.second->get_uv_vertex(1)->vertex);
+      BLI_assert(fill_primitive);
+      MeshVertex *other_prim_vertex =
+          fill_primitive->get_other_uv_vertex(uv_vertex->vertex, shared_edge_vertex)->vertex;
+
+      UVVertex uv_vertex_template;
+      uv_vertex_template.vertex = uv_vertex->vertex;
+      uv_vertex_template.uv = uv_vertex->uv;
+      UVVertex *vertex_1_ptr = island.lookup_or_create(uv_vertex_template);
+      uv_vertex_template.vertex = shared_edge_vertex;
+      uv_vertex_template.uv = old_uv;
+      UVVertex *vertex_2_ptr = island.lookup_or_create(uv_vertex_template);
+      uv_vertex_template.vertex = other_prim_vertex;
+      uv_vertex_template.uv = corner.second->get_uv_vertex(1)->uv;
+      UVVertex *vertex_3_ptr = island.lookup_or_create(uv_vertex_template);
+      add_uv_primitive_fill(island, *vertex_1_ptr, *vertex_2_ptr, *vertex_3_ptr, *fill_primitive);
     }
   }
 }
@@ -408,7 +480,7 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
 
   // Debug setting to reduce the extension to a number of iterations as long as not all corner
   // cases have been implemented.
-  int num_iterations = 6;
+  int num_iterations = 7;
   while (num_iterations) {
     if (num_iterations == 1) {
       printf("Last iteration");
@@ -426,7 +498,7 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
 
     // TODO: extend
     extend_at_vert(*this, *extension_corner, mesh_data);
-    validate_border();
+    // validate_border();
 
     /* Mark that the vert is extended. Unable to extend twice. */
     extension_corner->second->flags.extendable = false;

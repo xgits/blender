@@ -72,13 +72,13 @@ class Engine {
   Evaluator evaluator_;
   /* Stores the viewport size at the time the last compositor evaluation happened. See the
    * update_viewport_size method for more information. */
-  int2 viewport_size_;
+  int2 last_viewport_size_;
 
  public:
   Engine()
       : context_(texture_pool_),
         evaluator_(context_, node_tree()),
-        viewport_size_(context_.get_viewport_size())
+        last_viewport_size_(context_.get_viewport_size())
   {
   }
 
@@ -95,11 +95,11 @@ class Engine {
    * before evaluating the compositor. */
   void update_viewport_size()
   {
-    if (viewport_size_ == context_.get_viewport_size()) {
+    if (last_viewport_size_ == context_.get_viewport_size()) {
       return;
     }
 
-    viewport_size_ = context_.get_viewport_size();
+    last_viewport_size_ = context_.get_viewport_size();
 
     evaluator_.reset();
   }

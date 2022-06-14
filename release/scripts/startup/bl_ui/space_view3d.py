@@ -6107,7 +6107,7 @@ class VIEW3D_PT_shading_render_pass(Panel):
 class VIEW3D_PT_shading_compositor(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'HEADER'
-    bl_label = "Compositor"
+    bl_label = "Realtime Compositor"
     bl_parent_id = 'VIEW3D_PT_shading'
 
     @classmethod

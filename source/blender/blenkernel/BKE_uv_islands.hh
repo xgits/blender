@@ -219,12 +219,22 @@ struct UVEdge {
     return has_shared_edge(*other.vertices[0], *other.vertices[1]);
   }
 
+  bool has_same_vertices(const MeshVertex &vert1, const MeshVertex &vert2) const
+  {
+    return (vertices[0]->vertex == &vert1 && vertices[1]->vertex == &vert2) ||
+           (vertices[0]->vertex == &vert2 && vertices[1]->vertex == &vert1);
+  }
+
   bool has_same_uv_vertices(const UVEdge &other) const
   {
-    return has_shared_edge(other) && ((vertices[0]->vertex == other.vertices[0]->vertex &&
-                                       vertices[1]->vertex == other.vertices[1]->vertex) ||
-                                      (vertices[0]->vertex == other.vertices[1]->vertex &&
-                                       vertices[1]->vertex == other.vertices[0]->vertex));
+    return has_shared_edge(other) &&
+           has_same_vertices(*other.vertices[0]->vertex, *other.vertices[1]->vertex);
+    ;
+  }
+
+  bool has_same_vertices(const MeshEdge &edge) const
+  {
+    return has_same_vertices(*edge.vert1, *edge.vert2);
   }
 
   bool is_border_edge() const
@@ -330,7 +340,7 @@ struct UVPrimitive {
     for (UVEdge *uv_edge : edges) {
       const float2 &e1 = uv_edge->vertices[0]->uv;
       const float2 &e2 = uv_edge->vertices[1]->uv;
-      if ((e1 == uv1 && e2 == uv2) || (e1 == uv2 && e2 == uv2)) {
+      if ((e1 == uv1 && e2 == uv2) || (e1 == uv2 && e2 == uv1)) {
         return uv_edge;
       }
     }
@@ -423,6 +433,15 @@ struct UVBorder {
   static std::optional<UVBorder> extract_from_edges(Vector<UVBorderEdge> &edges);
 
   void validate() const;
+
+  /** Remove edge from the border. updates the indexes. */
+  void remove(int64_t index)
+  {
+    /* Could read the border_index from any border edge as they are consistent. */
+    uint64_t border_index = edges[0].border_index;
+    edges.remove(index);
+    update_indexes(border_index);
+  }
 };
 
 struct UVIsland {

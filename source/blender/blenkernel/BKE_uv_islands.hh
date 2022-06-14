@@ -125,6 +125,20 @@ struct MeshData {
     init_vertices();
     init_primitives();
     init_edges();
+
+    for (const MeshVertex &v : vertices) {
+      printf("Vert {v%d}\n", v.v);
+      for (const MeshEdge *e : v.edges) {
+        printf("-Edge {v%d v%d}\n", e->vert1->v, e->vert2->v);
+        for (const MeshPrimitive *p : e->primitives) {
+          printf(" -Prim {p%d, v%d v%d v%d}\n",
+                 p->index,
+                 p->vertices[0].vertex->v,
+                 p->vertices[1].vertex->v,
+                 p->vertices[2].vertex->v);
+        }
+      }
+    }
   }
   void init_vertices()
   {
@@ -166,11 +180,12 @@ struct MeshData {
       for (int j = 0; j < 3; j++) {
         int v1 = mloop[tri.tri[j]].v;
         int v2 = mloop[tri.tri[(j + 1) % 3]].v;
+        /* TODO: Use lookup_ptr to be able to store edge 0. */
         void *v = BLI_edgehash_lookup(eh, v1, v2);
         int64_t edge_index;
         if (v == nullptr) {
           edge_index = edges.size();
-          BLI_edgehash_insert(eh, v1, v2, POINTER_FROM_INT(edge_index));
+          BLI_edgehash_insert(eh, v1, v2, POINTER_FROM_INT(edge_index + 1));
           MeshEdge edge;
           edge.vert1 = &vertices[v1];
           edge.vert2 = &vertices[v2];
@@ -180,7 +195,7 @@ struct MeshData {
           vertices[v2].edges.append(edge_ptr);
         }
         else {
-          edge_index = POINTER_AS_INT(v);
+          edge_index = POINTER_AS_INT(v) - 1;
         }
 
         MeshEdge *edge = &edges[edge_index];
@@ -360,6 +375,19 @@ struct UVPrimitive {
       const float2 &e1 = uv_edge->vertices[0]->uv;
       const float2 &e2 = uv_edge->vertices[1]->uv;
       if ((e1 == uv1 && e2 == uv2) || (e1 == uv2 && e2 == uv1)) {
+        return uv_edge;
+      }
+    }
+    BLI_assert_unreachable();
+    return nullptr;
+  }
+
+  UVEdge *get_uv_edge(const MeshVertex *v1, const MeshVertex *v2) const
+  {
+    for (UVEdge *uv_edge : edges) {
+      const MeshVertex *e1 = uv_edge->vertices[0]->vertex;
+      const MeshVertex *e2 = uv_edge->vertices[1]->vertex;
+      if ((e1 == v1 && e2 == v2) || (e1 == v2 && e2 == v1)) {
         return uv_edge;
       }
     }
@@ -649,7 +677,7 @@ void svg(std::ostream &ss, const UVIslands &islands, int step);
 void svg(std::ostream &ss, const UVPrimitive &primitive);
 void svg(std::ostream &ss, const UVPrimitive &primitive, int step);
 void svg(std::ostream &ss, const UVIslandsMask &mask, int step);
-void svg(std::ostream &ss, const UVBorder &border);
+void svg(std::ostream &ss, const UVBorder &border, int step);
 void svg_footer(std::ostream &ss);
 
 struct UVIslands {
@@ -692,7 +720,7 @@ struct UVIslands {
       for (UVBorder &border : island.borders) {
         border.update_indexes(index);
         index++;
-        svg(of, border);
+        svg(of, border, 0);
       }
     }
     svg_footer(of);
@@ -713,7 +741,7 @@ struct UVIslands {
     svg_header(of);
     for (const UVIsland &island : islands) {
       for (const UVBorder &border : island.borders) {
-        svg(of, border);
+        svg(of, border, 0);
       }
     }
     svg_footer(of);

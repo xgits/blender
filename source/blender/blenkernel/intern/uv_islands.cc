@@ -384,6 +384,9 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
   }
   else {
     UVEdge *current_edge = corner.first->edge;
+
+    Vector<UVBorderEdge> new_border_edges;
+
     for (int i = 0; i < num_to_add; i++) {
       float2 old_uv = current_edge->get_other_uv_vertex(uv_vertex->vertex)->uv;
       MeshVertex *shared_edge_vertex =
@@ -425,10 +428,11 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
 
         segment.flags.found = true;
 
-        /* TODO: should be done based on meshvertex */
         UVPrimitive &new_prim = island.uv_primitives[island.uv_primitives.size() - 1];
-        current_edge = new_prim.get_uv_edge(uv_vertex->uv, new_uv);
-
+        current_edge = new_prim.get_uv_edge(uv_vertex->vertex, other_prim_vertex);
+        UVBorderEdge new_border(new_prim.get_uv_edge(shared_edge_vertex, other_prim_vertex),
+                                &new_prim);
+        new_border_edges.append(new_border);
         break;
       }
     }
@@ -455,7 +459,28 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
       uv_vertex_template.uv = corner.second->get_uv_vertex(1)->uv;
       UVVertex *vertex_3_ptr = island.lookup_or_create(uv_vertex_template);
       add_uv_primitive_fill(island, *vertex_1_ptr, *vertex_2_ptr, *vertex_3_ptr, *fill_primitive);
+
+      UVPrimitive &new_prim = island.uv_primitives[island.uv_primitives.size() - 1];
+      UVBorderEdge new_border(new_prim.get_uv_edge(shared_edge_vertex, other_prim_vertex),
+                              &new_prim);
+      new_border_edges.append(new_border);
     }
+
+    int border_index = corner.first->border_index;
+    UVBorder &border = island.borders[border_index];
+    int border_insert = corner.first->index;
+    int border_next = corner.second->index;
+    border.remove(border_insert);
+    if (border_next != 0) {
+      border_next--;
+    }
+    border.remove(border_next);
+    for (UVBorderEdge &edge : new_border_edges) {
+      edge.flags.extendable = false;
+    }
+    border.edges.insert(border_insert, new_border_edges);
+
+    border.update_indexes(border_index);
   }
 }
 
@@ -471,6 +496,10 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
   of.open("/tmp/extend.svg");
   svg_header(of);
   svg(of, *this, step++);
+  for (UVBorder &border : borders) {
+    svg(of, border, step);
+  }
+  step++;
 #endif
 
   int64_t border_index = 0;
@@ -480,7 +509,7 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
 
   // Debug setting to reduce the extension to a number of iterations as long as not all corner
   // cases have been implemented.
-  int num_iterations = 7;
+  int num_iterations = 999999;
   while (num_iterations) {
     if (num_iterations == 1) {
       printf("Last iteration");
@@ -498,13 +527,17 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
 
     // TODO: extend
     extend_at_vert(*this, *extension_corner, mesh_data);
-    // validate_border();
+    validate_border();
 
     /* Mark that the vert is extended. Unable to extend twice. */
     extension_corner->second->flags.extendable = false;
     num_iterations--;
 #ifdef DEBUG_SVG
     svg(of, *this, step++);
+    for (UVBorder &border : borders) {
+      svg(of, border, step);
+    }
+    step++;
 #endif
   }
 #ifdef DEBUG_SVG
@@ -926,11 +959,11 @@ void svg(std::ostream &ss, const UVPrimitive &primitive, int step)
   ss << "</g>\n";
 }
 
-void svg(std::ostream &ss, const UVBorder &border)
+void svg(std::ostream &ss, const UVBorder &border, int step)
 {
-  ss << "<g>\n";
+  ss << "<g transform=\"translate(" << step * 1024 << " 0)\">\n";
 
-  ss << " <g stroke=\"lightgrey\">\n";
+  ss << " <g stroke=\"grey\">\n";
   for (const UVBorderEdge &edge : border.edges) {
     float2 v1 = edge.get_uv_vertex(0)->uv;
     float2 v2 = edge.get_uv_vertex(1)->uv;
@@ -939,7 +972,7 @@ void svg(std::ostream &ss, const UVBorder &border)
   }
   ss << " </g>\n";
 
-  ss << " <g fill=\"red\">\n";
+  ss << " <g fill=\"black\">\n";
   for (const UVBorderEdge &edge : border.edges) {
     float2 v1 = edge.get_uv_vertex(0)->uv;
     ss << "       <text x=\"" << svg_x(v1) << "\" y=\"" << svg_y(v1) << "\">"

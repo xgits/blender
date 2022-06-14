@@ -802,7 +802,8 @@ TreeElement *outliner_add_element(SpaceOutliner *space_outliner,
                                   void *idv,
                                   TreeElement *parent,
                                   short type,
-                                  short index)
+                                  short index,
+                                  const bool expand)
 {
   ID *id = reinterpret_cast<ID *>(idv);
 
@@ -894,10 +895,10 @@ TreeElement *outliner_add_element(SpaceOutliner *space_outliner,
     te->idcode = GS(id->name);
   }
 
-  if (te->abstract_element && te->abstract_element->isExpandValid()) {
+  if (expand && te->abstract_element && te->abstract_element->isExpandValid()) {
     tree_element_expand(*te->abstract_element, *space_outliner);
   }
-  else if (type == TSE_SOME_ID) {
+  else if (expand && (type == TSE_SOME_ID)) {
     /* ID types not (fully) ported to new design yet. */
     if (te->abstract_element->expandPoll(*space_outliner)) {
       outliner_add_id_contents(space_outliner, te, tselem, id);
@@ -1682,6 +1683,9 @@ void outliner_build_tree(Main *mainvar,
   space_outliner->storeflag &= ~SO_TREESTORE_REBUILD;
 
   if (region->do_draw & RGN_DRAW_NO_REBUILD) {
+    BLI_assert_msg(space_outliner->runtime->tree_display != nullptr,
+                   "Skipping rebuild before tree was built properly, a full redraw should be "
+                   "triggered instead");
     return;
   }
 

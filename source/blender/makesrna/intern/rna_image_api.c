@@ -59,9 +59,8 @@ static void rna_Image_save_render(
 
   ImageSaveOptions opts;
 
-  if (BKE_image_save_options_init(&opts, bmain, scene, image, NULL, false)) {
+  if (BKE_image_save_options_init(&opts, bmain, scene, image, NULL, false, true)) {
     opts.save_copy = true;
-    opts.save_as_render = true;
     STRNCPY(opts.filepath, path);
 
     if (!BKE_image_save(reports, bmain, image, NULL, &opts)) {
@@ -83,7 +82,7 @@ static void rna_Image_save(Image *image, Main *bmain, bContext *C, ReportList *r
   Scene *scene = CTX_data_scene(C);
   ImageSaveOptions opts;
 
-  if (BKE_image_save_options_init(&opts, bmain, scene, image, NULL, false)) {
+  if (BKE_image_save_options_init(&opts, bmain, scene, image, NULL, false, false)) {
     if (!BKE_image_save(reports, bmain, image, NULL, &opts)) {
       BKE_reportf(reports,
                   RPT_ERROR,
@@ -165,7 +164,10 @@ static void rna_Image_scale(Image *image, ReportList *reports, int width, int he
 {
   if (!BKE_image_scale(image, width, height)) {
     BKE_reportf(reports, RPT_ERROR, "Image '%s' does not have any image data", image->id.name + 2);
+    return;
   }
+  BKE_image_partial_update_mark_full_update(image);
+  WM_main_add_notifier(NC_IMAGE | NA_EDITED, image);
 }
 
 static int rna_Image_gl_load(

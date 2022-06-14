@@ -221,32 +221,29 @@ static void add_uv_primitive_shared_uv_edge(UVIsland &island,
                                                                connected_vert_2->vertex);
   UVVertex vert_template;
   vert_template.uv = uv_unconnected;
-  vert_template.loop = other_vert->loop;
   vert_template.vertex = other_vert->vertex;
-  UVVertex *vert_ptr = island.lookup_or_create(vert_template, true);
+  UVVertex *vert_ptr = island.lookup_or_create(vert_template);
 
   const MeshUVVert *mesh_vert_1 = &mesh_primitive->get_uv_vert(connected_vert_1->vertex);
   vert_template.uv = connected_vert_1->uv;
-  vert_template.loop = mesh_vert_1->loop;
   vert_template.vertex = mesh_vert_1->vertex;
-  UVVertex *vert_1_ptr = island.lookup_or_create(vert_template, true);
+  UVVertex *vert_1_ptr = island.lookup_or_create(vert_template);
 
   const MeshUVVert *mesh_vert_2 = &mesh_primitive->get_uv_vert(connected_vert_2->vertex);
   vert_template.uv = connected_vert_2->uv;
-  vert_template.loop = mesh_vert_2->loop;
   vert_template.vertex = mesh_vert_2->vertex;
-  UVVertex *vert_2_ptr = island.lookup_or_create(vert_template, true);
+  UVVertex *vert_2_ptr = island.lookup_or_create(vert_template);
 
   UVEdge edge_template;
   edge_template.vertices[0] = vert_1_ptr;
   edge_template.vertices[1] = vert_2_ptr;
-  prim1.edges.append(island.lookup_or_create(edge_template, true));
+  prim1.edges.append(island.lookup_or_create(edge_template));
   edge_template.vertices[0] = vert_2_ptr;
   edge_template.vertices[1] = vert_ptr;
-  prim1.edges.append(island.lookup_or_create(edge_template, true));
+  prim1.edges.append(island.lookup_or_create(edge_template));
   edge_template.vertices[0] = vert_ptr;
   edge_template.vertices[1] = vert_1_ptr;
-  prim1.edges.append(island.lookup_or_create(edge_template, true));
+  prim1.edges.append(island.lookup_or_create(edge_template));
   prim1.append_to_uv_edges();
   prim1.append_to_uv_vertices();
   island.uv_primitives.append(prim1);
@@ -268,19 +265,20 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
   printf("Found %d new edges to add\n", num_to_add);
 
   if (num_to_add == 0) {
-    float2 center_uv = corner.uv(0.5f);
+    float2 center_uv_1 = corner.uv(0.5f);
     // no new triangles found. In this case we should extend the existing borders.
     printf(" - add new projection for {%lld}\n", corner.second->uv_primitive->primitive->index);
     add_uv_primitive_shared_uv_edge(island,
                                     corner.first->get_uv_vertex(1),
                                     corner.first->get_uv_vertex(0),
-                                    center_uv,
+                                    center_uv_1,
                                     corner.second->uv_primitive->primitive);
+    float2 center_uv_2 = corner.uv(0.5f);
     printf(" - add new projection for {%lld}\n", corner.first->uv_primitive->primitive->index);
     add_uv_primitive_shared_uv_edge(island,
                                     corner.second->get_uv_vertex(0),
                                     corner.second->get_uv_vertex(1),
-                                    center_uv,
+                                    center_uv_2,
                                     corner.first->uv_primitive->primitive);
 
     /* Update border after adding the new geometry. */
@@ -290,18 +288,18 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
         UVBorderEdge *border_edge = corner.first;
         border_edge->uv_primitive = &new_prim;
         border_edge->edge = border_edge->uv_primitive->get_uv_edge(
-            corner.first->get_uv_vertex(0)->uv, center_uv);
-        border_edge->reverse_order = border_edge->edge->vertices[0]->uv == center_uv;
+            corner.first->get_uv_vertex(0)->uv, center_uv_1);
+        border_edge->reverse_order = border_edge->edge->vertices[0]->uv == center_uv_1;
       }
       {
         UVPrimitive &new_prim = island.uv_primitives[island.uv_primitives.size() - 1];
         UVBorderEdge *border_edge = corner.second;
         border_edge->uv_primitive = &new_prim;
         border_edge->edge = border_edge->uv_primitive->get_uv_edge(
-            corner.second->get_uv_vertex(1)->uv, center_uv);
-        border_edge->reverse_order = border_edge->edge->vertices[1]->uv == center_uv;
+            corner.second->get_uv_vertex(1)->uv, center_uv_2);
+        border_edge->reverse_order = border_edge->edge->vertices[1]->uv == center_uv_2;
       }
-      island.validate_border();
+      // island.validate_border();
     }
   }
   else {
@@ -344,7 +342,7 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
 
   // Debug setting to reduce the extension to a number of iterations as long as not all corner
   // cases have been implemented.
-  int num_iterations = 5;
+  int num_iterations = 6;
   while (num_iterations) {
     if (num_iterations == 1) {
       printf("");
@@ -362,7 +360,7 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
 
     // TODO: extend
     extend_at_vert(*this, *extension_corner, mesh_data);
-    validate_border();
+    // validate_border();
 
     /* Mark that the vert is extended. Unable to extend twice. */
     extension_corner->second->flags.extendable = false;

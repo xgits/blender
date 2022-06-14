@@ -182,8 +182,6 @@ struct MeshData {
 };
 
 struct UVVertex {
-  /* Loop index of the loop vertex in the original mesh. */
-  uint64_t loop;
   MeshVertex *vertex;
   /* Position in uv space. */
   float2 uv;
@@ -195,7 +193,7 @@ struct UVVertex {
   {
   }
 
-  explicit UVVertex(const MeshUVVert &vert) : loop(vert.loop), vertex(vert.vertex), uv(vert.uv)
+  explicit UVVertex(const MeshUVVert &vert) : vertex(vert.vertex), uv(vert.uv)
   {
   }
 };
@@ -216,17 +214,17 @@ struct UVEdge {
            (vertices[0]->uv == v2.uv && vertices[1]->uv == v1.uv);
   }
 
-  bool has_shared_loop(const UVEdge &other) const
-  {
-    return ((vertices[0]->loop == other.vertices[0]->loop &&
-             vertices[1]->loop == other.vertices[1]->loop) ||
-            (vertices[0]->loop == other.vertices[1]->loop &&
-             vertices[1]->loop == other.vertices[0]->loop));
-  }
-
   bool has_shared_edge(const UVEdge &other) const
   {
     return has_shared_edge(*other.vertices[0], *other.vertices[1]);
+  }
+
+  bool has_same_uv_vertices(const UVEdge &other) const
+  {
+    return has_shared_edge(other) && ((vertices[0]->vertex == other.vertices[0]->vertex &&
+                                       vertices[1]->vertex == other.vertices[1]->vertex) ||
+                                      (vertices[0]->vertex == other.vertices[1]->vertex &&
+                                       vertices[1]->vertex == other.vertices[0]->vertex));
   }
 
   bool is_border_edge() const
@@ -453,9 +451,9 @@ struct UVIsland {
       const MeshUVVert &v1 = primitive.get_uv_vert(edge->vert1);
       const MeshUVVert &v2 = primitive.get_uv_vert(edge->vert2);
       UVEdge uv_edge_template;
-      uv_edge_template.vertices[0] = lookup_or_create(UVVertex(v1), false);
-      uv_edge_template.vertices[1] = lookup_or_create(UVVertex(v2), false);
-      UVEdge *uv_edge = lookup_or_create(uv_edge_template, true);
+      uv_edge_template.vertices[0] = lookup_or_create(UVVertex(v1));
+      uv_edge_template.vertices[1] = lookup_or_create(UVVertex(v2));
+      UVEdge *uv_edge = lookup_or_create(uv_edge_template);
       uv_primitive_ptr->edges.append(uv_edge);
       uv_edge->append_to_uv_vertices();
       uv_edge->uv_primitives.append(uv_primitive_ptr);
@@ -463,11 +461,10 @@ struct UVIsland {
     return uv_primitive_ptr;
   }
 
-  UVVertex *lookup_or_create(const UVVertex &vertex, const bool loop_check)
+  UVVertex *lookup_or_create(const UVVertex &vertex)
   {
     for (UVVertex &uv_vertex : uv_vertices) {
-      if (uv_vertex.uv == vertex.uv && uv_vertex.vertex == vertex.vertex &&
-          ((!loop_check) || ((uv_vertex.loop == vertex.loop)))) {
+      if (uv_vertex.uv == vertex.uv && uv_vertex.vertex == vertex.vertex) {
         return &uv_vertex;
       }
     }
@@ -478,10 +475,10 @@ struct UVIsland {
     return result;
   }
 
-  UVEdge *lookup_or_create(const UVEdge &edge, const bool loop_check)
+  UVEdge *lookup_or_create(const UVEdge &edge)
   {
     for (UVEdge &uv_edge : uv_edges) {
-      if (uv_edge.has_shared_edge(edge) && (!loop_check || uv_edge.has_shared_loop(edge))) {
+      if (uv_edge.has_same_uv_vertices(edge)) {
         return &uv_edge;
       }
     }
@@ -507,9 +504,9 @@ struct UVIsland {
     for (int i = 0; i < 3; i++) {
       UVEdge *other_edge = primitive.edges[i];
       UVEdge uv_edge_template;
-      uv_edge_template.vertices[0] = lookup_or_create(*other_edge->vertices[0], false);
-      uv_edge_template.vertices[1] = lookup_or_create(*other_edge->vertices[1], false);
-      new_prim_ptr->edges[i] = lookup_or_create(uv_edge_template, false);
+      uv_edge_template.vertices[0] = lookup_or_create(*other_edge->vertices[0]);
+      uv_edge_template.vertices[1] = lookup_or_create(*other_edge->vertices[1]);
+      new_prim_ptr->edges[i] = lookup_or_create(uv_edge_template);
       new_prim_ptr->edges[i]->append_to_uv_vertices();
       new_prim_ptr->edges[i]->uv_primitives.append(new_prim_ptr);
     }

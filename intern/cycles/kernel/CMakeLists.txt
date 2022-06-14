@@ -246,6 +246,7 @@ set(SRC_KERNEL_INTEGRATOR_HEADERS
 
 set(SRC_KERNEL_LIGHT_HEADERS
   light/light.h
+  light/light_tree.h
   light/background.h
   light/common.h
   light/sample.h

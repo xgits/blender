@@ -14,6 +14,7 @@
 #include "kernel/integrator/volume_stack.h"
 
 #include "kernel/light/light.h"
+#include "kernel/light/light_tree.h"
 #include "kernel/light/sample.h"
 
 CCL_NAMESPACE_BEGIN
@@ -114,9 +115,17 @@ ccl_device_forceinline void integrate_surface_direct_light(KernelGlobals kg,
     float light_u, light_v;
     path_state_rng_2D(kg, rng_state, PRNG_LIGHT_U, &light_u, &light_v);
 
-    if (!light_distribution_sample_from_position(
-            kg, light_u, light_v, sd->time, sd->P, bounce, path_flag, &ls)) {
-      return;
+    if (kg->__data.integrator.use_light_tree) {
+      if (!light_tree_sample_from_position(
+              kg, rng_state, light_u, light_v, sd->time, sd->N, sd->P, bounce, path_flag, &ls)) {
+        return;
+      }
+    }
+    else {
+      if (!light_distribution_sample_from_position(
+              kg, light_u, light_v, sd->time, sd->P, bounce, path_flag, &ls)) {
+        return;
+      }
     }
   }
 

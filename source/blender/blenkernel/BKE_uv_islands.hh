@@ -521,6 +521,13 @@ struct UVBorder {
 
   void update_indexes(uint64_t border_index);
 
+  /**
+   * Mark edges not extendable when they don't share the same vertex.
+   *
+   * No solutions exists (yet) when the vertexes are different.
+   */
+  void update_extendability();
+
   static std::optional<UVBorder> extract_from_edges(Vector<UVBorderEdge> &edges);
 
   void validate() const;
@@ -771,8 +778,12 @@ struct UVIslands {
 
   void extend_borders(const UVIslandsMask &islands_mask, const MeshData &mesh_data)
   {
+    printf("Extending borders\n");
+    printf("=================\n");
     ushort index = 0;
     for (UVIsland &island : islands) {
+      printf("Island %d\n", index);
+      printf("---------\n");
       island.extend_border(islands_mask, index++, mesh_data);
     }
 

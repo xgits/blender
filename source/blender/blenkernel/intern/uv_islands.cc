@@ -29,7 +29,7 @@ void UVIsland::extract_borders()
     if (!border.has_value()) {
       break;
     }
-    if (border->is_ccw()) {
+    if (!border->is_ccw()) {
       border->flip();
     }
     borders.append(*border);
@@ -135,7 +135,6 @@ struct Fan {
           break;
         }
       }
-      printf("%lld %lld (%p)\n", stop_primitive->index, previous_primitive->index, current_edge);
       if (stop_primitive == previous_primitive) {
         break;
       }
@@ -318,6 +317,9 @@ static void add_uv_primitive_fill(UVIsland &island,
 
 static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshData &mesh_data)
 {
+  int border_index = corner.first->border_index;
+  UVBorder &border = island.borders[border_index];
+
   UVVertex *uv_vertex = corner.second->get_uv_vertex(0);
   Fan fan(*(uv_vertex->vertex));
   fan.init_uv_coordinates(*uv_vertex, island);
@@ -331,58 +333,47 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
   printf("Found %d new edges to add\n", num_to_add);
 
   if (num_to_add == 0) {
-    MeshPrimitive *fill_primitive = find_fill_border(corner);
-    if (fill_primitive) {
-      add_uv_primitive_fill(island,
-                            *corner.first->get_uv_vertex(0),
-                            *corner.first->get_uv_vertex(1),
-                            *corner.second->get_uv_vertex(1),
-                            *fill_primitive);
-      // Update border, remove second.
+    MeshPrimitive *fill_primitive_1 = corner.second->uv_primitive->primitive;
+    MeshPrimitive *fill_primitive_2 = corner.first->uv_primitive->primitive;
 
-      UVPrimitive &new_prim = island.uv_primitives[island.uv_primitives.size() - 1];
+    MeshPrimitive *fill_primitive = find_fill_border(corner);
+    // Although the fill_primitive can fill the missing segment it could lead to a squashed
+    // triangle when the corner angle is near 180 degrees. In order to fix this we will
+    // always add two segments both using the found fill primitive.
+    if (fill_primitive) {
+      fill_primitive_1 = fill_primitive;
+      fill_primitive_2 = fill_primitive;
+    }
+
+    float2 center_uv = corner.uv(0.5f);
+    printf(" - add new projection for {%lld}\n", fill_primitive_1->index);
+    add_uv_primitive_shared_uv_edge(island,
+                                    corner.first->get_uv_vertex(1),
+                                    corner.first->get_uv_vertex(0),
+                                    center_uv,
+                                    fill_primitive_1);
+    printf(" - add new projection for {%lld}\n", fill_primitive_2->index);
+    add_uv_primitive_shared_uv_edge(island,
+                                    corner.second->get_uv_vertex(0),
+                                    corner.second->get_uv_vertex(1),
+                                    center_uv,
+                                    fill_primitive_2);
+    /* Update border after adding the new geometry. */
+    {
+      UVPrimitive &new_prim = island.uv_primitives[island.uv_primitives.size() - 2];
       UVBorderEdge *border_edge = corner.first;
       border_edge->uv_primitive = &new_prim;
       border_edge->edge = border_edge->uv_primitive->get_uv_edge(
-          corner.first->get_uv_vertex(0)->uv, corner.second->get_uv_vertex(1)->uv);
-      border_edge->reverse_order = border_edge->edge->vertices[0] ==
-                                   corner.second->get_uv_vertex(1);
-      island.borders[corner.second->border_index].remove(corner.second->index);
+          corner.first->get_uv_vertex(0)->uv, center_uv);
+      border_edge->reverse_order = border_edge->edge->vertices[0]->uv == center_uv;
     }
-    else {
-      float2 center_uv = corner.uv(0.5f);
-      // no new triangles found. In this case we should extend the existing borders.
-      printf(" - add new projection for {%lld}\n", corner.second->uv_primitive->primitive->index);
-      add_uv_primitive_shared_uv_edge(island,
-                                      corner.first->get_uv_vertex(1),
-                                      corner.first->get_uv_vertex(0),
-                                      center_uv,
-                                      corner.second->uv_primitive->primitive);
-      printf(" - add new projection for {%lld}\n", corner.first->uv_primitive->primitive->index);
-      add_uv_primitive_shared_uv_edge(island,
-                                      corner.second->get_uv_vertex(0),
-                                      corner.second->get_uv_vertex(1),
-                                      center_uv,
-                                      corner.first->uv_primitive->primitive);
-
-      /* Update border after adding the new geometry. */
-
-      {
-        UVPrimitive &new_prim = island.uv_primitives[island.uv_primitives.size() - 2];
-        UVBorderEdge *border_edge = corner.first;
-        border_edge->uv_primitive = &new_prim;
-        border_edge->edge = border_edge->uv_primitive->get_uv_edge(
-            corner.first->get_uv_vertex(0)->uv, center_uv);
-        border_edge->reverse_order = border_edge->edge->vertices[0]->uv == center_uv;
-      }
-      {
-        UVPrimitive &new_prim = island.uv_primitives[island.uv_primitives.size() - 1];
-        UVBorderEdge *border_edge = corner.second;
-        border_edge->uv_primitive = &new_prim;
-        border_edge->edge = border_edge->uv_primitive->get_uv_edge(
-            corner.second->get_uv_vertex(1)->uv, center_uv);
-        border_edge->reverse_order = border_edge->edge->vertices[1]->uv == center_uv;
-      }
+    {
+      UVPrimitive &new_prim = island.uv_primitives[island.uv_primitives.size() - 1];
+      UVBorderEdge *border_edge = corner.second;
+      border_edge->uv_primitive = &new_prim;
+      border_edge->edge = border_edge->uv_primitive->get_uv_edge(
+          corner.second->get_uv_vertex(1)->uv, center_uv);
+      border_edge->reverse_order = border_edge->edge->vertices[1]->uv == center_uv;
     }
   }
   else {
@@ -469,8 +460,6 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
       new_border_edges.append(new_border);
     }
 
-    int border_index = corner.first->border_index;
-    UVBorder &border = island.borders[border_index];
     int border_insert = corner.first->index;
     int border_next = corner.second->index;
     border.remove(border_insert);
@@ -478,13 +467,13 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
       border_next--;
     }
     border.remove(border_next);
-    for (UVBorderEdge &edge : new_border_edges) {
-      edge.flags.extendable = false;
-    }
+    border_insert = min_ii(border_insert, border.edges.size() - 1);
     border.edges.insert(border_insert, new_border_edges);
 
     border.update_indexes(border_index);
   }
+
+  border.update_extendability();
 }
 
 void UVIsland::extend_border(const UVIslandsMask &mask,
@@ -512,10 +501,11 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
 
   // Debug setting to reduce the extension to a number of iterations as long as not all corner
   // cases have been implemented.
-  int num_iterations = 999999;
+  int num_iterations = 99999;
   while (num_iterations) {
+    printf("**iterations left %d**\n", num_iterations);
     if (num_iterations == 1) {
-      printf("Last iteration");
+      printf("Last iteration\n");
     }
     std::optional<UVBorderCorner> extension_corner = sharpest_border_corner(*this);
     if (!extension_corner.has_value()) {
@@ -639,6 +629,16 @@ void UVBorder::update_indexes(uint64_t border_index)
     edges[i].index = i;
     edges[i].next_index = next;
     edges[i].border_index = border_index;
+  }
+}
+
+void UVBorder::update_extendability()
+{
+  for (UVBorderEdge &edge : edges) {
+    UVBorderEdge &prev_edge = edges[edge.prev_index];
+    if (prev_edge.get_uv_vertex(1) != edge.get_uv_vertex(0)) {
+      edge.flags.extendable = false;
+    }
   }
 }
 
@@ -908,10 +908,10 @@ void svg(std::ostream &ss, const UVIslandsMask &mask, int step)
       if (x > 0 && mask.mask[offset] == mask.mask[offset2]) {
         continue;
       }
-      float2 start = float2(float(x), float(y)) / resolution * float2(1024, 1024);
-      float2 end = float2(float(x), float(y + 1)) / resolution * float2(1024, 1024);
-      ss << "       <line x1=\"" << start.x << "\" y1=\"" << start.y << "\" x2=\"" << end.x
-         << "\" y2=\"" << end.y << "\"/>\n";
+      float2 start = float2(float(x), float(y)) / resolution;
+      float2 end = float2(float(x), float(y + 1)) / resolution;
+      ss << "       <line x1=\"" << svg_x(start) << "\" y1=\"" << svg_y(start) << "\" x2=\""
+         << svg_x(end) << "\" y2=\"" << svg_y(end) << "\"/>\n";
     }
   }
 
@@ -925,10 +925,10 @@ void svg(std::ostream &ss, const UVIslandsMask &mask, int step)
       if (y > 0 && mask.mask[offset] == mask.mask[offset2]) {
         continue;
       }
-      float2 start = float2(float(x), float(y)) / resolution * float2(1024, 1024);
-      float2 end = float2(float(x + 1), float(y)) / resolution * float2(1024, 1024);
-      ss << "       <line x1=\"" << start.x << "\" y1=\"" << start.y << "\" x2=\"" << end.x
-         << "\" y2=\"" << end.y << "\"/>\n";
+      float2 start = float2(float(x), float(y)) / resolution;
+      float2 end = float2(float(x + 1), float(y)) / resolution;
+      ss << "       <line x1=\"" << svg_x(start) << "\" y1=\"" << svg_y(start) << "\" x2=\""
+         << svg_x(end) << "\" y2=\"" << svg_y(end) << "\"/>\n";
     }
   }
   ss << " </g>\n";

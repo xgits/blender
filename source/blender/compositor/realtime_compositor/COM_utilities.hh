@@ -48,8 +48,8 @@ InputDescriptor input_descriptor_from_input_socket(const InputSocketRef *socket)
  * both dimensions is as small as possible but at least covers the entirety of global_size assuming
  * the shader has a local group size given by local_size. That means that the number of invocations
  * might be a bit larger than global_size, so shaders has to put that into consideration. A default
- * local size of 16x16 is assumed, which is the optimal local size of image processing when no
- * local memory is used. */
+ * local size of 16x16 is assumed, which is the optimal local size for many image processing
+ * shaders. */
 void compute_dispatch_global(GPUShader *shader, int2 global_size, int2 local_size = int2(16));
 
 }  // namespace blender::realtime_compositor

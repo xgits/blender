@@ -141,11 +141,11 @@ void Evaluator::map_node_operation_inputs_to_their_results(DNode node,
 void Evaluator::compile_and_evaluate_shader_compile_unit(CompileState &compile_state)
 {
   /* Compile the shader compile unit into a shader operation. */
-  SubSchedule &sub_schedule = compile_state.get_shader_compile_unit_sub_schedule();
-  ShaderOperation *operation = new ShaderOperation(context_, sub_schedule);
+  ShaderCompileUnit &compile_unit = compile_state.get_shader_compile_unit();
+  ShaderOperation *operation = new ShaderOperation(context_, compile_unit);
 
-  /* Map each of the nodes in the sub-schedule to the compiled operation. */
-  for (DNode node : sub_schedule) {
+  /* Map each of the nodes in the compile unit to the compiled operation. */
+  for (DNode node : compile_unit) {
     compile_state.map_node_to_shader_operation(node, operation);
   }
 

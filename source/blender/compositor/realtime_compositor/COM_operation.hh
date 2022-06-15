@@ -27,14 +27,16 @@ using ProcessorsVector = Vector<std::unique_ptr<SimpleOperation>>;
 /* ------------------------------------------------------------------------------------------------
  * Operation
  *
- * The operation is the basic unit of the compositor. Operations have a number of inputs and
- * outputs that are declared during construction and are identified by string identifiers. Inputs
- * are declared by calling declare_input_descriptor providing an appropriate descriptor. Those
- * inputs are mapped to results computed by other operations linked to them. Such mappings are
- * established by the compiler during compilation by calling the map_input_to_result method.
- * Outputs are populated by calling the populate_result method, providing a result of an
- * appropriate type. Those results are then allocated and computed by derived classes in their
- * execute method.
+ * The operation is the basic unit of the compositor. The evaluator compiles the compositor node
+ * tree into an ordered stream of operations which are then executed in order during evaluation.
+ * The operation class can be sub-classed to implement a new operation. Operations have a number of
+ * inputs and outputs that are declared during construction and are identified by string
+ * identifiers. Inputs are declared by calling declare_input_descriptor providing an appropriate
+ * descriptor. Those inputs are mapped to the results computed by other operations whose outputs
+ * are linked to the inputs. Such mappings are established by the compiler during compilation by
+ * calling the map_input_to_result method. Outputs are populated by calling the populate_result
+ * method, providing a result of an appropriate type. Upon execution, the operation allocates a
+ * result for each of its outputs and computes their value based on its inputs and options.
  *
  * Each input may have one or more input processors, which are simple operations that process the
  * inputs before the operation is executed, see the discussion in COM_simple_operation.hh for more
@@ -110,7 +112,7 @@ class Operation {
   /* Add and evaluate any needed input processors, which essentially just involves calling the
    * add_and_evaluate_input_processor method with the needed processors. This is called before
    * executing the operation to prepare its inputs. The class defines a default implementation
-   * which adds typically necessary processors, but derived classes can override the method to have
+   * which adds typically needed processors, but derived classes can override the method to have
    * a different implementation, extend the implementation, or remove it entirely. */
   virtual void add_and_evaluate_input_processors();
 

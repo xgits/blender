@@ -17,10 +17,14 @@ using namespace nodes::derived_node_tree_types;
 /* ------------------------------------------------------------------------------------------------
  * Shader Node
  *
- * A class that represents a node in a GPU material. The GPU node stacks for inputs and outputs are
- * stored and populated during construction. Derived class should implement the compile method to
- * implement the node and link it to the GPU material. The GPU material compiler is expected to
- * initialize the input links of the node before invoking the compile method. */
+ * A shader node encapsulates a compositor node tree that is capable of being used together with
+ * other shader nodes to construct a Shader Operation using the GPU material compiler. A GPU node
+ * stack for each of the node inputs and outputs is stored and populated during construction in
+ * order to represent the node as a GPU node inside the GPU material graph, see GPU_material.h for
+ * more information. Derived classes should implement the compile method to add the node and link
+ * it to the GPU material given to the method. The compiler is expected to initialize the input
+ * links of the node before invoking the compile method. See the discussion in
+ * COM_shader_operation.hh for more information. */
 class ShaderNode {
  private:
   /* The node that this operation represents. */

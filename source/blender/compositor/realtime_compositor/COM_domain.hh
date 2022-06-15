@@ -21,8 +21,8 @@ enum class Interpolation : uint8_t {
  * Realization Options
  *
  * The options that describe how an input result prefer to be realized on some other domain. This
- * is used by the Realize On Domain Processor Operation to identify the appropriate method of
- * realization. See the Domain class for more information. */
+ * is used by the Realize On Domain Operation to identify the appropriate method of realization.
+ * See the Domain class for more information. */
 class RealizationOptions {
  public:
   /* The interpolation method that should be used when performing realization. Since realizing a
@@ -43,28 +43,56 @@ class RealizationOptions {
 /* ------------------------------------------------------------------------------------------------
  * Domain
  *
- * A domain is a rectangular area of a certain size in pixels that is transformed by a certain
- * transformation in pixel space relative to some reference space.
+ * The compositor is designed in such a way as to allow compositing in an infinite virtual
+ * compositing space. Consequently, any result of an operation is not only represented by its image
+ * output, but also by its transformation in that virtual space. The transformation of the result
+ * together with the dimension of its image is stored and represented by a Domain. In the figure
+ * below, two results of different domains are illustrated on the virtual compositing space. One of
+ * the results is centered in space with an image dimension of 800px × 600px, and the other result
+ * is scaled down and translated such that it lies in the upper right quadrant of the space with an
+ * image dimension of 800px × 400px. The position of the domain is in pixel space, and the domain
+ * is considered centered if it has an identity transformation. Note that both results have the
+ * same resolution, but occupy different areas of the virtual compositing space.
  *
- * Any result computed by an operation resides in a domain. The size of the domain of the result is
- * the size of its texture. The transformation of the domain of the result is typically an identity
- * transformation, indicating that the result is centered in space. But a transformation operation
- * like the rotate, translate, or transform operations will adjust the transformation to make the
- * result reside somewhere different in space. The domain of a single value result is irrelevant
- * and always set to an identity domain.
+ *                                          y
+ *                                          ^
+ *                           800px x 600px  |
+ *                    .---------------------|---------------------.
+ *                    |                     |    800px x 600px    |
+ *                    |                     |   .-------------.   |
+ *                    |                     |   |             |   |
+ *                    |                     |   '-------------'   |
+ *              ------|---------------------|---------------------|------> x
+ *                    |                     |                     |
+ *                    |                     |                     |
+ *                    |                     |                     |
+ *                    |                     |                     |
+ *                    '---------------------|---------------------'
+ *                                          |
  *
- * An operation operates in a certain domain called the operation domain, it follows that the
- * operation only cares about the inputs whose domain is inside or at least intersects the
- * operation domain. To abstract away the different domains of the inputs, any input that have a
- * different domain than the operation domain is realized on the operation domain through a
- * Realize On Domain Processor Operation, except inputs whose descriptor sets skip_realization or
- * expects_single_value, see InputDescriptor for more information. The realization process simply
- * projects the input domain on the operation domain, copies the area of input that intersects the
- * operation domain, and fill the rest with zeros or repetitions of the input domain; depending on
- * the realization_options, see the RealizationOptions class for more information. This process is
- * illustrated below, assuming no repetition in either directions. It follows that operations
- * should expect all their inputs to have the same domain and consequently size, except for inputs
- * that explicitly skip realization.
+ * By default, results have domains of identity transformations, that is, they are centered in
+ * space, but a transformation operation like the rotate, translate, or transform operations will
+ * adjust the transformation to make the result reside somewhere different in space. The domain of
+ * a single value result is irrelevant and always set to an identity domain.
+ *
+ * An operation is typically only concerned about a subset of the virtual compositing space, this
+ * subset is represented by a domain which is called the Operation Domain. It follows that before
+ * the operation itself is executed, inputs will typically be realized on the operation domain to
+ * be in the same domain and have the same dimension as that of the operation domain. This process
+ * is called Domain Realization and is implemented using an operation called the Realize On Domain
+ * Operation. Realization involves projecting the result onto the target domain, copying the area
+ * of the result that intersects the target domain, and filling the rest with zeros or repetitions
+ * of the result depending on the realization options that can be set by the user. Consequently,
+ * operations can generally expect their inputs to have the same dimension and can operate on them
+ * directly and transparently. For instance, if an operation takes both results illustrated in
+ * the figure above, and the operation has an operation domain that matches the bigger domain, the
+ * result with the bigger domain will not need to be realized because it already has a domain that
+ * matches that of the operation domain, but the result with the smaller domain will have to be
+ * realized into a new result that has the same domain as the domain of the bigger result. Assuming
+ * no repetition, the output of the realization will be an all zeros image with dimension 800px ×
+ * 600px with a small scaled version of the smaller result copied into the upper right quadrant of
+ * the image. The following figure illustrates the realization process on a different set of
+ * results
  *
  *                                   Realized Result
  *             +-------------+       +-------------+
@@ -78,38 +106,37 @@ class RealizationOptions {
  *       |   Input   |
  *       +-----------+
  *
- * Each operation can define an arbitrary operation domain, but in most cases, the operation domain
- * is inferred from the inputs. By default, the operation domain is computed as follows. Typically,
- * one input of the operation is said to be the domain input and the operation domain is inferred
- * from it. The domain input is determined to be the non-single value input that have the highest
- * domain priority, a zero value being the highest priority. If all inputs are single values, then
- * the operation domain is irrelevant and an identity domain is set. See Operation::compute_domain
- * for more information. If multiple inputs have the same domain priority, the first of which will
- * be considered to be the domain input.
+ * An operation can operate in an arbitrary operation domain, but in most cases, the operation
+ * domain is inferred from the inputs of the operation. In particular, one of the inputs is said to
+ * be the Domain Input of the operation and the operation domain is inferred from its domain. It
+ * follows that this particular input will not need realization, because it already has the correct
+ * domain. The domain input selection mechanism is as follows. Each of the inputs are assigned a
+ * value by the developer called the Domain Priority, the domain input is then chosen as the
+ * non-single value input with the highest domain priority, zero being the highest priority. See
+ * Operation::compute_domain for more information.
  *
  * The aforementioned logic for operation domain computation is only a default that works for most
  * cases, but an operation can override the compute_domain method to implement a different logic.
  * For instance, output nodes have an operation domain the same size as the viewport and with an
  * identity transformation, their operation domain doesn't depend on the inputs at all.
  *
- * For instance, a filter operation have two inputs, a factor and a color, the latter of which
- * has a domain priority of 0 and the former has a domain priority of 1. If the color input is not
- * a single value, then the domain of this operation is computed to be the same size and
- * transformation as the color input, because it has the highest priority. And if the factor input
- * have a different size and/or transformation from the computed domain of the operation, it will
- * be projected and realized on it to have the same size as described above. It follows that the
- * color input, will not need to be realized because it already has the same size and
- * transformation as the domain of the operation, because the operation domain is inferred from it.
- * On the other hand, if the color input is a single value input, then the operation domain will be
- * the same as the domain of the factor input, because it has the second highest domain priority.
- * Finally, if both inputs are single value inputs, the operation domain will be an identity and is
- * irrelevant. */
+ * For instance, a filter operation has two inputs, a factor and a color, the latter of which is
+ * assigned a domain priority of 0 and the former is assigned a domain priority of 1. If the color
+ * input is not a single value input, then the color input is considered to be the domain input of
+ * the operation and the operation domain is computed to be the same domain as the color input,
+ * because it has the highest priority. It follows that if the factor input has a different domain
+ * than the computed domain of the operation, it will be projected and realized on it to have the
+ * same domain as described above. On the other hand, if the color input is a single value input,
+ * then the factor input is considered to be the domain input and the operation domain will be the
+ * same as the domain of the factor input, because it has the second highest domain priority.
+ * Finally, if both inputs are single value inputs, the operation domain will be an identity domain
+ * and is irrelevant, because the output will be a domain-less single value. */
 class Domain {
  public:
   /* The size of the domain in pixels. */
   int2 size;
   /* The 2D transformation of the domain defining its translation in pixels, rotation, and scale in
-   * 2D space. */
+   * the virtual compositing space. */
   float3x3 transformation;
   /* The options that describe how this domain prefer to be realized on some other domain. See the
    * RealizationOptions class for more information. */
@@ -131,7 +158,7 @@ class Domain {
 
 /* Compare the size and transformation of the domain. The realization_options are not compared
  * because they only describe the method of realization on another domain, which is not technically
- * a proprty of the domain itself. */
+ * a property of the domain itself. */
 bool operator==(const Domain &a, const Domain &b);
 
 /* Inverse of the above equality operator. */

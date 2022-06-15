@@ -21,8 +21,9 @@ namespace blender::realtime_compositor {
 
 using namespace nodes::derived_node_tree_types;
 
-/* A type representing a contiguous subset of the node execution schedule. */
-using SubSchedule = VectorSet<DNode>;
+/* A type representing a contiguous subset of the node execution schedule that will be compiled
+ * into a Shader Operation. */
+using ShaderCompileUnit = VectorSet<DNode>;
 /* A type representing a map that associates the identifier of each input of the operation with the
  * output socket it is linked to. */
 using InputsToLinkedOutputsMap = Map<StringRef, DOutputSocket>;
@@ -33,18 +34,21 @@ using OutputSocketsToOutputIdentifiersMap = Map<DOutputSocket, StringRef>;
 /* ------------------------------------------------------------------------------------------------
  * Shader Operation
  *
- * An operation that compiles a contiguous subset of the node execution schedule into a single
- * shader using the GPU material compiler.
+ * An operation that evaluates a shader compiled from a contiguous subset of the node execution
+ * schedule using the GPU material compiler, see GPU_material.h for more information. The subset
+ * of the node execution schedule is called a shader compile unit, see the discussion in
+ * COM_compile_state.hh for more information.
  *
- * Consider the following node graph with a node execution schedule denoted by the number of each
+ * Consider the following node graph with a node execution schedule denoted by the number on each
  * node. The compiler may decide to compile a subset of the execution schedule into a shader
  * operation, in this case, the nodes from 3 to 5 were compiled together into a shader operation.
- * See the discussion in COM_evaluator.hh for more information on the compilation process. Each of
- * the nodes inside the sub-schedule implements a Shader Node which is instantiated, stored in
- * shader_nodes_, and used during compilation. See the discussion in COM_shader_node.hh for more
- * information. Links that are internal to the shader operation are established between the input
- * and outputs of the shader nodes, for instance, the links between nodes 3 <-> 4 and nodes 4
- * <-> 5. However, links that cross the boundary of the shader operation needs special handling.
+ * This subset is called the shader compile unit. See the discussion in COM_evaluator.hh for more
+ * information on the compilation process. Each of the nodes inside the compile unit implements a
+ * Shader Node which is instantiated, stored in shader_nodes_, and used during compilation. See the
+ * discussion in COM_shader_node.hh for more information. Links that are internal to the shader
+ * operation are established between the input and outputs of the shader nodes, for instance, the
+ * links between nodes 3 and 4 as well as those between nodes 4 and 5. However, links that cross
+ * the boundary of the shader operation needs special handling.
  *
  *                                        Shader Operation
  *                   +------------------------------------------------------+
@@ -66,6 +70,7 @@ using OutputSocketsToOutputIdentifiersMap = Map<DOutputSocket, StringRef>;
  * for the links from node 2 to nodes 3 and 5. Note, however, that only one input is declared for
  * each distinct output socket, so both links from node 2 share the same input of the operation.
  * Once an input is declared for a distinct output socket:
+ *
  * 1. A material texture is added to the GPU material. This texture will be bound to the result of
  *    the output socket during evaluation.
  * 2. The newly added texture is mapped to the output socket in output_to_material_texture_map_
@@ -79,6 +84,7 @@ using OutputSocketsToOutputIdentifiersMap = Map<DOutputSocket, StringRef>;
  * operation are considered outputs of the operation itself and are declared as such. For instance,
  * the link from node 5 to node 6 is declared as an output to the operation. Once an output is
  * declared for an output socket:
+ *
  * 1. A material image is added to the GPU material. This image will be bound to the result of
  *    the operation output during evaluation. This is the image where the result of that output
  *    will be written.
@@ -92,13 +98,12 @@ using OutputSocketsToOutputIdentifiersMap = Map<DOutputSocket, StringRef>;
  * outputs, and any necessary resources. */
 class ShaderOperation : public Operation {
  private:
-  /* The execution sub-schedule that will be compiled into this shader operation. */
-  SubSchedule sub_schedule_;
+  /* The compile unit that will be compiled into this shader operation. */
+  ShaderCompileUnit compile_unit_;
   /* The GPU material backing the operation. This is created and compiled during construction and
-   * freed during construction. */
+   * freed during destruction. */
   GPUMaterial *material_;
-  /* A map that associates each node in the execution sub-schedule with an instance of its shader
-   * node. */
+  /* A map that associates each node in the compile unit with an instance of its shader node. */
   Map<DNode, std::unique_ptr<ShaderNode>> shader_nodes_;
   /* A map that associates the identifier of each input of the operation with the output socket it
    * is linked to. See the above discussion for more information. */
@@ -112,9 +117,9 @@ class ShaderOperation : public Operation {
   Map<DOutputSocket, GPUMaterialTexture *> output_to_material_texture_map_;
 
  public:
-  /* Construct and compile a GPU material from the give node execution sub-schedule by calling
+  /* Construct and compile a GPU material from the given shader compile unit by calling
    * GPU_material_from_callbacks with the appropriate callbacks. */
-  ShaderOperation(Context &context, SubSchedule &sub_schedule);
+  ShaderOperation(Context &context, ShaderCompileUnit &compile_unit);
 
   /* Free the GPU material. */
   ~ShaderOperation();
@@ -137,7 +142,8 @@ class ShaderOperation : public Operation {
   /* Compute and set the initial reference counts of all the results of the operation. The
    * reference counts of the results are the number of operations that use those results, which is
    * computed as the number of inputs whose node is part of the schedule and is linked to the
-   * output corresponding to each result. The node execution schedule is given as an input. */
+   * output corresponding to each of the results of the operation. The node execution schedule is
+   * given as an input. */
   void compute_results_reference_counts(const Schedule &schedule);
 
  private:
@@ -169,8 +175,8 @@ class ShaderOperation : public Operation {
 
   /* A static callback method of interface GPUMaterialCompileFn that is passed to
    * GPU_material_from_callbacks to compile the GPU material. The thunk parameter will be a pointer
-   * to the instance of ShaderOperation that is being compiled. The method goes over the
-   * execution sub-schedule and does the following for each node:
+   * to the instance of ShaderOperation that is being compiled. The method goes over the compile
+   * unit and does the following for each node:
    *
    * - Instantiate a ShaderNode from the node and add it to shader_nodes_.
    * - Link the inputs of the node if needed. The inputs are either linked to other nodes in the

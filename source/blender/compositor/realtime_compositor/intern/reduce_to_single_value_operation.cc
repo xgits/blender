@@ -55,7 +55,7 @@ SimpleOperation *ReduceToSingleValueOperation::construct_if_needed(Context &cont
     return nullptr;
   }
 
-  /* The input is a full sized texture can can't be reduced to a single value, the operation is not
+  /* The input is a full sized texture and can't be reduced to a single value, the operation is not
    * needed. */
   if (input_result.domain().size != int2(1)) {
     return nullptr;

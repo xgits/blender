@@ -19,12 +19,12 @@ using namespace nodes::derived_node_tree_types;
 /* ------------------------------------------------------------------------------------------------
  * Node Operation
  *
- * The operation class that nodes should implement and instantiate in the get_compositor_operation
- * function of the bNodeType, passing the inputs given to that function to the constructor. This
- * class essentially just implements a default constructor that populates output results for all
- * outputs of the node as well as input descriptors for all inputs of the nodes based on their
- * socket declaration. The class also provides some utility methods for easier implementation of
- * nodes. */
+ * A node operation is a subclass of operation that nodes should implement and instantiate in the
+ * get_compositor_operation function of bNodeType, passing the inputs given to that function to the
+ * constructor. This class essentially just implements a default constructor that populates output
+ * results for all outputs of the node as well as input descriptors for all inputs of the nodes
+ * based on their socket declaration. The class also provides some utility methods for easier
+ * implementation of nodes. */
 class NodeOperation : public Operation {
  private:
   /* The node that this operation represents. */

@@ -18,9 +18,9 @@ using namespace nodes::derived_node_tree_types;
 /* ------------------------------------------------------------------------------------------------
  * Compile State
  *
- * This is a utility class used to track the state of compilation when compiling the node tree. In
- * particular, it tracks two important pieces of information, each of which is described in one of
- * the following sections.
+ * The compile state a utility class used to track the state of compilation when compiling the node
+ * tree. In particular, it tracks two important pieces of information, each of which is described
+ * in one of the following sections.
  *
  * First, it stores a mapping between all nodes and the operations they were compiled into. The
  * mapping are stored independently depending on the type of the operation in the node_operations_
@@ -96,7 +96,7 @@ using namespace nodes::derived_node_tree_types;
  * domain is not an identity domain. Identity domains corresponds to single value results, so those
  * are always compatible with any domain. The domain of the compile unit is computed and set in
  * the add_node_to_shader_compile_unit method. When processing a node, the computed domain of node
- * is compared to compile unit domain in the should_compile_shader_compile_unit method, noting
+ * is compared to the compile unit domain in the should_compile_shader_compile_unit method, noting
  * that identity domains are always compatible. Node domains are computed in the
  * compute_shader_node_domain method, which is analogous to Operation::compute_domain for nodes
  * that are not yet compiled. */
@@ -111,10 +111,10 @@ class CompileState {
    * more information. */
   Map<DNode, NodeOperation *> node_operations_;
   Map<DNode, ShaderOperation *> shader_operations_;
-  /* A contiguous subset of the node execution schedule that contains the unit of nodes that will
+  /* A contiguous subset of the node execution schedule that contains the group of nodes that will
    * be compiled together into a Shader Operation. See the discussion in COM_evaluator.hh for
    * more information. */
-  SubSchedule shader_compile_unit_;
+  ShaderCompileUnit shader_compile_unit_;
   /* The domain of the shader compile unit. */
   Domain shader_compile_unit_domain_ = Domain::identity();
 
@@ -142,8 +142,8 @@ class CompileState {
    * the give node. */
   void add_node_to_shader_compile_unit(DNode node);
 
-  /* Get the sub-schedule representing the compile unit.  */
-  SubSchedule &get_shader_compile_unit_sub_schedule();
+  /* Get a reference to the shader compile unit.  */
+  ShaderCompileUnit &get_shader_compile_unit();
 
   /* Clear the compile unit. This should be called once the compile unit is compiled to ready it to
    * track the next potential compile unit. */

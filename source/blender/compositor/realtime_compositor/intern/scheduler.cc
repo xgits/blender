@@ -100,7 +100,7 @@ using NeededBuffers = Map<DNode, int>;
  * - The node tree is actually a graph that allows output sharing, which is not something that was
  *   taken into consideration in this implementation because it is difficult to correctly consider.
  * - Each node may allocate any number of internal buffers, which is not taken into account in this
- *   implementation because it really affects the output and is done by very few nodes.
+ *   implementation because it rarely affects the output and is done by very few nodes.
  * - The compiler may decide to compiler the schedule differently depending on runtime information
  *   which we can merely speculate at scheduling-time as described above. */
 static NeededBuffers compute_number_of_needed_buffers(DNode output_node)

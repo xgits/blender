@@ -68,7 +68,7 @@ void CompileState::add_node_to_shader_compile_unit(DNode node)
   }
 }
 
-SubSchedule &CompileState::get_shader_compile_unit_sub_schedule()
+ShaderCompileUnit &CompileState::get_shader_compile_unit()
 {
   return shader_compile_unit_;
 }

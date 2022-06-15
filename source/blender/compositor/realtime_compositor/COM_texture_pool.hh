@@ -36,12 +36,15 @@ bool operator==(const TexturePoolKey &a, const TexturePoolKey &b);
 /* ------------------------------------------------------------------------------------------------
  * Texture Pool
  *
- * A pool of textures that can be used to allocate textures that can be reused transparently
- * throughout the evaluation of the compositor. This texture pool only pools textures throughout a
- * single evaluation of the compositor and will reset after the evaluation without freeing any
- * textures. Cross-evaluation pooling and freeing of unused textures is the responsibility of the
- * back-end texture pool used by the allocate_texture method. In the case of the viewport
- * compositor engine, this would be the global DRWTexturePool of the draw manager. */
+ * A texture pool allows the allocation and reuse of textures throughout the execution of the
+ * compositor to avoid memory fragmentation and texture allocation overheads. The texture pool
+ * delegates the actual texture allocation to an allocate_texture method that should be implemented
+ * by the caller of the compositor evaluator, allowing a more agnostic and flexible execution that
+ * can be controlled by the caller. If the compositor is expected to execute frequently, like on
+ * every redraw, then the allocation method should use a persistent texture pool to allow
+ * cross-evaluation texture pooling, for instance, by using the DRWTexturePool. But if the
+ * evaluator is expected to execute infrequently, the allocated textures can just be freed when the
+ * evaluator is done, that is, when the pool is destructed. */
 class TexturePool {
  private:
   /* The set of textures in the pool that are available to acquire for each distinct texture
@@ -51,14 +54,14 @@ class TexturePool {
  public:
   /* Check if there is an available texture with the given specification in the pool, if such
    * texture exists, return it, otherwise, return a newly allocated texture. Expect the texture to
-   * be uncleared and contains garbage data. */
+   * be uncleared and possibly contains garbage data. */
   GPUTexture *acquire(int2 size, eGPUTextureFormat format);
 
   /* Shorthand for acquire with GPU_RGBA16F format. */
   GPUTexture *acquire_color(int2 size);
 
-  /* Shorthand for acquire with GPU_RGBA16F format. Identical to acquire_color because vector
-   * are stored in RGBA textures because RGB texture have limited support. */
+  /* Shorthand for acquire with GPU_RGBA16F format. Identical to acquire_color because vectors
+   * are stored in RGBA textures, due to the limited support for RGB textures. */
   GPUTexture *acquire_vector(int2 size);
 
   /* Shorthand for acquire with GPU_R16F format. */
@@ -68,16 +71,15 @@ class TexturePool {
    * the texture to be one that was acquired using the same texture pool. */
   void release(GPUTexture *texture);
 
-  /* Reset the texture pool by clearing all available textures. The textures are not freed. If they
-   * are not needed, they should be freed by the back-end texture pool used by the allocate_texture
-   * method. This should be called after the compositor is done evaluating. */
+  /* Reset the texture pool by clearing all available textures without freeing the textures. If the
+   * textures will no longer be needed, they should be freed in the destructor. This should be
+   * called after the compositor is done evaluating. */
   void reset();
 
  private:
   /* Returns a newly allocated texture with the given specification. This method should be
-   * implemented by the compositor engine and should use a global texture pool that is persistent
-   * across evaluations and capable of freeing unused textures. In the case of the viewport
-   * compositor engine, this would be the global DRWTexturePool of the draw manager. */
+   * implemented by the caller of the compositor evaluator. See the class description for more
+   * information. */
   virtual GPUTexture *allocate_texture(int2 size, eGPUTextureFormat format) = 0;
 };
 

@@ -24,12 +24,12 @@ enum class ResultType : uint8_t {
 /* ------------------------------------------------------------------------------------------------
  * Result
  *
- * A class that represents an output of an operation, which either stores a single value or a
- * texture. An operation will output a single value result if that value would have been constant
- * over the whole texture. Single value results are stored in 1x1 textures to make them easily
- * accessible in shaders. But the same value is also stored in the value union member of the result
- * for any host-side processing. The texture of the result is allocated from the texture pool
- * referenced by the result.
+ * A result represents the computed value of an output of an operation. A result can either
+ * represent an image or a single value. A result is typed, and can be of type color, vector, or
+ * float. Single value results are stored in 1x1 textures to make them easily accessible in
+ * shaders. But the same value is also stored in the value union member of the result for any
+ * host-side processing. The texture of the result is allocated from the texture pool referenced by
+ * the result.
  *
  * Results are reference counted and their textures are released once their reference count reaches
  * zero. After constructing a result, the set_initial_reference_count method is called to declare
@@ -40,15 +40,19 @@ enum class ResultType : uint8_t {
  * evaluation to its initial reference count by calling the reset method, which is why a separate
  * member initial_reference_count_ is stored to keep track of the initial value.
  *
- * A result reside in a certain domain defined by its texture size and transformation, see the
- * discussion in COM_domain.hh for more information.
+ * A result not only represents an image, but also the area it occupies in the virtual compositing
+ * space. This area is called the Domain of the result, see the discussion in COM_domain.hh for
+ * more information.
  *
- * A result can be a proxy result that merely wraps another master result, in which case, the
- * result's value is the value of its master and all reference counting is delegated to the master.
- * However, a proxy result can have a different domain from its master, which is what transform
- * operations do, they output a proxy result from their input and transform its domain in someway.
- * Proxy results can be created by calling the pass_through method, see that method for more
- * details. */
+ * A result can be a proxy result that merely wraps another master result, in which case, it shares
+ * its values and delegates all reference counting to it. While a proxy result shares the value of
+ * the master result, it can have a different domain. Consequently, transformation operations are
+ * implemented using proxy results, where their results are proxy results of their inputs but with
+ * their domains transformed based on their options. Moreover, proxy results can also be used as
+ * the results of identity operations, that is, operations that do nothing to their inputs in
+ * certain configurations. In which case, the proxy result is left as is with no extra
+ * transformation on its domain whatsoever. Proxy results can be created by calling the
+ * pass_through method, see that method for more details. */
 class Result {
  private:
   /* The base type of the texture or the type of the single value. */
@@ -87,7 +91,7 @@ class Result {
   /* The domain of the result. This only matters if the result was a texture. See the discussion in
    * COM_domain.hh for more information. */
   Domain domain_ = Domain::identity();
-  /* If not nullptr, then this result wraps and uses the texture of another master result. In this
+  /* If not nullptr, then this result wraps and shares the value of another master result. In this
    * case, calls to texture-related methods like increment_reference_count and release should
    * operate on the master result as opposed to this result. This member is typically set upon
    * calling the pass_through method, which sets this result to be the master of a target result.
@@ -128,18 +132,15 @@ class Result {
   /* Unbind the texture which was previously bound using bind_as_image. */
   void unbind_as_image() const;
 
-  /* Pass this result through to a target result. This method makes the target result a copy of
-   * this result, essentially having identical values between the two and consequently sharing the
-   * underlying texture. An exception is the initial reference count, whose value is retained and
-   * not copied, because it is a property of the original result and is needed for correctly
+  /* Pass this result through to a target result, in which case, the target result becomes a proxy
+   * result with this result as its master result. This is done by making the target result a copy
+   * of this result, essentially having identical values between the two and consequently sharing
+   * the underlying texture. An exception is the initial reference count, whose value is retained
+   * and not copied, because it is a property of the original result and is needed for correctly
    * resetting the result before the next evaluation. Additionally, this result is set to be the
    * master of the target result, by setting the master member of the target. Finally, the
-   * reference count of the result is incremented by the reference count of the target result. This
-   * is typically called in the allocate method of an operation whose input texture will not change
-   * and can be passed to the output directly. It should be noted that such operations can still
-   * adjust other properties of the result, like its domain. So for instance, the transform
-   * operation passes its input through to its output because it will not change it, however, it
-   * may adjusts its domain. */
+   * reference count of the result is incremented by the reference count of the target result. See
+   * the discussion above for more information. */
   void pass_through(Result &target);
 
   /* Transform the result by the given transformation. This effectively pre-multiply the given

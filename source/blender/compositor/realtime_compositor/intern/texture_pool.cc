@@ -43,8 +43,8 @@ bool operator==(const TexturePoolKey &a, const TexturePoolKey &b)
 
 GPUTexture *TexturePool::acquire(int2 size, eGPUTextureFormat format)
 {
-  /* Check if there is an available texture with the required specification, and one exists, return
-   * it. */
+  /* Check if there is an available texture with the required specification, and if one exists,
+   * return it. */
   const TexturePoolKey key = TexturePoolKey(size, format);
   Vector<GPUTexture *> &available_textures = textures_.lookup_or_add_default(key);
   if (!available_textures.is_empty()) {

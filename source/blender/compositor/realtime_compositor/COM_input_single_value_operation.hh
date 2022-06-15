@@ -24,7 +24,7 @@ class InputSingleValueOperation : public Operation {
  private:
   /* The identifier of the output. */
   static const StringRef output_identifier_;
-  /* The input socket whose value the operation will set to its result. */
+  /* The input socket whose value will be computed as the operation's result. */
   DInputSocket input_socket_;
 
  public:

@@ -17,11 +17,12 @@ namespace blender::realtime_compositor {
 /* ------------------------------------------------------------------------------------------------
  * Context
  *
- * An abstract class which is used by operations to access data intrinsic to the compositor engine.
- * The compositor engine should implement the class to provide the necessary functionalities for
- * operations. The class also provides a reference to the texture pool which should be implemented
- * by the compositor engine and provided during construction. Finally, the class have an instance
- * of a shader pool for convenient shader acquisition. */
+ * A Context is an abstract class that is implemented by the caller of the evaluator to provide the
+ * necessary data and functionalities for the correct operation of the evaluator. This includes
+ * providing input data like render passes and the active scene, as well as references to the data
+ * where the output of the evaluator will be written. The class also provides a reference to the
+ * texture pool which should be implemented by the caller and provided during construction.
+ * Finally, the class have an instance of a shader pool for convenient shader acquisition. */
 class Context {
  private:
   /* A texture pool that can be used to allocate textures for the compositor efficiently. */

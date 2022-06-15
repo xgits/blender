@@ -38,7 +38,7 @@ void Result::allocate_texture(Domain domain)
 void Result::allocate_single_value()
 {
   is_single_value_ = true;
-  /* Single values are stored in 1x1 textures. */
+  /* Single values are stored in 1x1 textures as well as the single value members. */
   const int2 texture_size{1, 1};
   switch (type_) {
     case ResultType::Float:
@@ -100,7 +100,7 @@ void Result::pass_through(Result &target)
   /* Increment the reference count of the master by the original reference count of the target. */
   increment_reference_count(target.reference_count());
 
-  /* Make the target an exact copy of this result, but keep the initial reference count as this is
+  /* Make the target an exact copy of this result, but keep the initial reference count, as this is
    * a property of the original result and is needed for correctly resetting the result before the
    * next evaluation. */
   const int initial_reference_count = target.initial_reference_count_;

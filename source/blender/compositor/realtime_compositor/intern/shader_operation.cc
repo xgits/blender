@@ -28,8 +28,8 @@ namespace blender::realtime_compositor {
 
 using namespace nodes::derived_node_tree_types;
 
-ShaderOperation::ShaderOperation(Context &context, SubSchedule &sub_schedule)
-    : Operation(context), sub_schedule_(sub_schedule)
+ShaderOperation::ShaderOperation(Context &context, ShaderCompileUnit &compile_unit)
+    : Operation(context), compile_unit_(compile_unit)
 {
   material_ = GPU_material_from_callbacks(
       &setup_material, &compile_material, &generate_material, this);
@@ -131,7 +131,7 @@ void ShaderOperation::setup_material(void *UNUSED(thunk), GPUMaterial *material)
 void ShaderOperation::compile_material(void *thunk, GPUMaterial *material)
 {
   ShaderOperation *operation = static_cast<ShaderOperation *>(thunk);
-  for (DNode node : operation->sub_schedule_) {
+  for (DNode node : operation->compile_unit_) {
     /* Instantiate a shader node for the node and add it to the shader_nodes_ map. */
     ShaderNode *shader_node = node->typeinfo()->get_compositor_shader_node(node);
     operation->shader_nodes_.add_new(node, std::unique_ptr<ShaderNode>(shader_node));
@@ -161,7 +161,7 @@ void ShaderOperation::link_node_inputs(DNode node, GPUMaterial *material)
 
     /* If the origin node is part of the shader operation, then just map the output stack link to
      * the input stack link. */
-    if (sub_schedule_.contains(output.node())) {
+    if (compile_unit_.contains(output.node())) {
       map_node_input(input, output);
       continue;
     }
@@ -253,7 +253,7 @@ void ShaderOperation::populate_results_for_node(DNode node, GPUMaterial *materia
     /* If any of the nodes linked to the output are not part of the shader operation, then an
      * output result needs to be populated. */
     const bool need_to_populate_result = is_output_linked_to_node_conditioned(
-        output, [&](DNode node) { return !sub_schedule_.contains(node); });
+        output, [&](DNode node) { return !compile_unit_.contains(node); });
 
     if (need_to_populate_result) {
       populate_operation_result(output, material);

@@ -12,8 +12,8 @@ namespace blender::realtime_compositor {
 /* -------------------------------------------------------------------------------------------------
  *  Shader Pool
  *
- * A pool of shaders identified by their info name that can be reused throughout the evaluation of
- * the compositor and are only freed when the shader pool is destroyed. */
+ * A shader pool is a pool of shaders identified by their info name that can be reused throughout
+ * the evaluation of the compositor and are only freed when the shader pool is destroyed. */
 class ShaderPool {
  private:
   /* The set of shaders identified by their info name that are currently available in the pool to

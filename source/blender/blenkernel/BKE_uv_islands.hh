@@ -127,11 +127,11 @@ struct MeshData {
     init_edges();
 
     for (const MeshVertex &v : vertices) {
-      printf("Vert {v%d}\n", v.v);
+      printf("Vert {v%lld}\n", v.v);
       for (const MeshEdge *e : v.edges) {
-        printf("-Edge {v%d v%d}\n", e->vert1->v, e->vert2->v);
+        printf("-Edge {v%lld v%lld}\n", e->vert1->v, e->vert2->v);
         for (const MeshPrimitive *p : e->primitives) {
-          printf(" -Prim {p%d, v%d v%d v%d}\n",
+          printf(" -Prim {p%lld, v%lld v%lld v%lld}\n",
                  p->index,
                  p->vertices[0].vertex->v,
                  p->vertices[1].vertex->v,
@@ -395,6 +395,33 @@ struct UVPrimitive {
     return nullptr;
   }
 
+  const bool contains_uv_vertex(const UVVertex *uv_vertex) const
+  {
+    for (UVEdge *edge : edges) {
+      if (std::find(edge->vertices.begin(), edge->vertices.end(), uv_vertex) !=
+          edge->vertices.end()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  const UVVertex *get_other_uv_vertex(const UVVertex *v1, const UVVertex *v2) const
+  {
+    BLI_assert(contains_uv_vertex(v1));
+    BLI_assert(contains_uv_vertex(v2));
+
+    for (const UVEdge *edge : edges) {
+      for (const UVVertex *uv_vertex : edge->vertices) {
+        if (uv_vertex != v1 && uv_vertex != v2) {
+          return uv_vertex;
+        }
+      }
+    }
+    BLI_assert_unreachable();
+    return nullptr;
+  }
+
   UVBorder extract_border() const;
 };
 
@@ -426,10 +453,19 @@ struct UVBorderEdge {
     int actual_index = reverse_order ? 1 - index : index;
     return edge->vertices[actual_index];
   }
+
   const UVVertex *get_uv_vertex(int index) const
   {
     int actual_index = reverse_order ? 1 - index : index;
     return edge->vertices[actual_index];
+  }
+
+  /**
+   * Get the uv vertex from the primitive that is not part of the edge.
+   */
+  const UVVertex *get_other_uv_vertex() const
+  {
+    return uv_primitive->get_other_uv_vertex(edge->vertices[0], edge->vertices[1]);
   }
 
   float length() const
@@ -469,9 +505,14 @@ struct UVBorder {
   Vector<UVBorderEdge> edges;
 
   /**
+   * Check if the border is counter clock wise from its island.
+   */
+  bool is_ccw() const;
+
+  /**
    * Flip the order of the verts, changing the order between CW and CCW.
    */
-  void flip_order();
+  void flip();
 
   /**
    * Calculate the outside angle of the given vert.

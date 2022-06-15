@@ -29,6 +29,9 @@ void UVIsland::extract_borders()
     if (!border.has_value()) {
       break;
     }
+    if (border->is_ccw()) {
+      border->flip();
+    }
     borders.append(*border);
   }
 }
@@ -594,11 +597,28 @@ std::optional<UVBorder> UVBorder::extract_from_edges(Vector<UVBorderEdge> &edges
   return border;
 }
 
-void UVBorder::flip_order()
+bool UVBorder::is_ccw() const
 {
+  const UVBorderEdge &edge = edges.first();
+  const UVVertex *uv_vertex1 = edge.get_uv_vertex(0);
+  const UVVertex *uv_vertex2 = edge.get_uv_vertex(1);
+  const UVVertex *uv_vertex3 = edge.get_other_uv_vertex();
+  float poly[3][2];
+  copy_v2_v2(poly[0], uv_vertex1->uv);
+  copy_v2_v2(poly[1], uv_vertex2->uv);
+  copy_v2_v2(poly[2], uv_vertex3->uv);
+  const bool ccw = cross_poly_v2(poly, 3) < 0.0;
+  return ccw;
+}
+
+void UVBorder::flip()
+{
+  uint64_t border_index = edges.first().border_index;
   for (UVBorderEdge &edge : edges) {
     edge.reverse_order = !edge.reverse_order;
   }
+  std::reverse(edges.begin(), edges.end());
+  update_indexes(border_index);
 }
 
 float UVBorder::outside_angle(const UVBorderEdge &edge) const

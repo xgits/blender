@@ -10,8 +10,6 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
-#include "COM_unsupported_node_operation.hh"
-
 #include "node_composite_util.hh"
 
 namespace blender::nodes::node_composite_glare_cc {
@@ -77,13 +75,6 @@ static void node_composit_buts_glare(uiLayout *layout, bContext *UNUSED(C), Poin
   }
 }
 
-using namespace blender::realtime_compositor;
-
-static NodeOperation *get_compositor_operation(Context &context, DNode node)
-{
-  return new UnsupportedNodeOperation(context, node);
-}
-
 }  // namespace blender::nodes::node_composite_glare_cc
 
 void register_node_type_cmp_glare()
@@ -97,7 +88,6 @@ void register_node_type_cmp_glare()
   ntype.draw_buttons = file_ns::node_composit_buts_glare;
   node_type_init(&ntype, file_ns::node_composit_init_glare);
   node_type_storage(&ntype, "NodeGlare", node_free_standard_storage, node_copy_standard_storage);
-  ntype.get_compositor_operation = file_ns::get_compositor_operation;
 
   nodeRegisterType(&ntype);
 }

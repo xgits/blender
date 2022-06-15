@@ -8,8 +8,6 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
-#include "COM_unsupported_node_operation.hh"
-
 #include "node_composite_util.hh"
 
 /* **************** LEVELS ******************** */
@@ -33,13 +31,6 @@ static void node_composit_buts_view_levels(uiLayout *layout, bContext *UNUSED(C)
   uiItemR(layout, ptr, "channel", UI_ITEM_R_SPLIT_EMPTY_NAME, "", ICON_NONE);
 }
 
-using namespace blender::realtime_compositor;
-
-static NodeOperation *get_compositor_operation(Context &context, DNode node)
-{
-  return new UnsupportedNodeOperation(context, node);
-}
-
 }  // namespace blender::nodes::node_composite_levels_cc
 
 void register_node_type_cmp_view_levels()
@@ -53,7 +44,6 @@ void register_node_type_cmp_view_levels()
   ntype.draw_buttons = file_ns::node_composit_buts_view_levels;
   ntype.flag |= NODE_PREVIEW;
   node_type_init(&ntype, file_ns::node_composit_init_view_levels);
-  ntype.get_compositor_operation = file_ns::get_compositor_operation;
 
   nodeRegisterType(&ntype);
 }

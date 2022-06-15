@@ -50,6 +50,11 @@ class Context {
   /* Get the name of the view currently being rendered. */
   virtual StringRef get_view_name() = 0;
 
+  /* Set an info message. This is called by the compositor evaluator to inform or warn the user
+   * about something, typically an error. The implementation should display the message in an
+   * appropriate place, which can be directly in the UI or just logged to the output stream. */
+  virtual void set_info_message(StringRef message) const = 0;
+
   /* Get the current frame number of the active scene. */
   int get_frame_number() const;
 

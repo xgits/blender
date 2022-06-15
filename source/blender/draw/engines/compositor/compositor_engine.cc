@@ -34,8 +34,16 @@ class DRWTexturePool : public TexturePool {
 };
 
 class DRWContext : public Context {
+ private:
+  /* A pointer to the info message of the compositor engine. This is a char array of size
+   * GPU_INFO_SIZE. The message is cleared prior to updating or evaluating the compositor. */
+  char *info_message_;
+
  public:
-  using Context::Context;
+  DRWContext(TexturePool &texture_pool, char *info_message)
+      : Context(texture_pool), info_message_(info_message)
+  {
+  }
 
   const Scene *get_scene() const override
   {
@@ -63,6 +71,11 @@ class DRWContext : public Context {
         BLI_findlink(&get_scene()->r.views, DRW_context_state_get()->v3d->multiview_eye));
     return view->name;
   }
+
+  void set_info_message(StringRef message) const override
+  {
+    message.copy(info_message_, GPU_INFO_SIZE);
+  }
 };
 
 class Engine {
@@ -75,8 +88,8 @@ class Engine {
   int2 last_viewport_size_;
 
  public:
-  Engine()
-      : context_(texture_pool_),
+  Engine(char *info_message)
+      : context_(texture_pool_, info_message),
         evaluator_(context_, node_tree()),
         last_viewport_size_(context_.get_viewport_size())
   {
@@ -130,6 +143,7 @@ typedef struct CompositorData {
   DRWViewportEmptyList *psl;
   DRWViewportEmptyList *stl;
   Engine *instance_data;
+  char info[GPU_INFO_SIZE];
 } CompositorData;
 
 static void compositor_engine_init(void *data)
@@ -137,7 +151,7 @@ static void compositor_engine_init(void *data)
   CompositorData *compositor_data = static_cast<CompositorData *>(data);
 
   if (!compositor_data->instance_data) {
-    compositor_data->instance_data = new Engine();
+    compositor_data->instance_data = new Engine(compositor_data->info);
   }
 }
 
@@ -155,7 +169,11 @@ static void compositor_engine_draw(void *data)
 
 static void compositor_engine_update(void *data)
 {
-  const CompositorData *compositor_data = static_cast<CompositorData *>(data);
+  CompositorData *compositor_data = static_cast<CompositorData *>(data);
+
+  /* Clear any info message that was set in a previous update. */
+  compositor_data->info[0] = '\0';
+
   if (compositor_data->instance_data) {
     compositor_data->instance_data->update(DRW_context_state_get()->depsgraph);
   }

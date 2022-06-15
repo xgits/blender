@@ -8,8 +8,6 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
-#include "COM_unsupported_node_operation.hh"
-
 #include "node_composite_util.hh"
 
 /* **************** Anti-Aliasing (SMAA 1x) ******************** */
@@ -44,13 +42,6 @@ static void node_composit_buts_antialiasing(uiLayout *layout, bContext *UNUSED(C
   uiItemR(col, ptr, "corner_rounding", 0, nullptr, ICON_NONE);
 }
 
-using namespace blender::realtime_compositor;
-
-static NodeOperation *get_compositor_operation(Context &context, DNode node)
-{
-  return new UnsupportedNodeOperation(context, node);
-}
-
 }  // namespace blender::nodes::node_composite_antialiasing_cc
 
 void register_node_type_cmp_antialiasing()
@@ -67,7 +58,6 @@ void register_node_type_cmp_antialiasing()
   node_type_init(&ntype, file_ns::node_composit_init_antialiasing);
   node_type_storage(
       &ntype, "NodeAntiAliasingData", node_free_standard_storage, node_copy_standard_storage);
-  ntype.get_compositor_operation = file_ns::get_compositor_operation;
 
   nodeRegisterType(&ntype);
 }

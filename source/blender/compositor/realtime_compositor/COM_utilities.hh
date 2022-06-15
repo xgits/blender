@@ -41,6 +41,10 @@ int number_of_inputs_linked_to_output_conditioned(DOutputSocket output,
 /* A node is a shader node if it defines a method to get a shader node operation. */
 bool is_shader_node(DNode node);
 
+/* Returns true if the given node is supported, that is, have an implementation. Returns false
+ * otherwise. */
+bool is_node_supported(DNode node);
+
 /* Get the input descriptor of the given input socket. */
 InputDescriptor input_descriptor_from_input_socket(const InputSocketRef *socket);
 

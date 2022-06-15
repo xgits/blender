@@ -32,7 +32,6 @@ set(SRC
   intern/shader_pool.cc
   intern/simple_operation.cc
   intern/texture_pool.cc
-  intern/unsupported_node_operation.cc
   intern/utilities.cc
 
   COM_compile_state.hh
@@ -53,7 +52,6 @@ set(SRC
   COM_shader_pool.hh
   COM_simple_operation.hh
   COM_texture_pool.hh
-  COM_unsupported_node_operation.hh
   COM_utilities.hh
 )
 

@@ -11,8 +11,6 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
-#include "COM_unsupported_node_operation.hh"
-
 #include "node_composite_util.hh"
 
 namespace blender::nodes::node_composite_planetrackdeform_cc {
@@ -81,13 +79,6 @@ static void node_composit_buts_planetrackdeform(uiLayout *layout, bContext *C, P
   }
 }
 
-using namespace blender::realtime_compositor;
-
-static NodeOperation *get_compositor_operation(Context &context, DNode node)
-{
-  return new UnsupportedNodeOperation(context, node);
-}
-
 }  // namespace blender::nodes::node_composite_planetrackdeform_cc
 
 void register_node_type_cmp_planetrackdeform()
@@ -102,7 +93,6 @@ void register_node_type_cmp_planetrackdeform()
   node_type_init(&ntype, file_ns::init);
   node_type_storage(
       &ntype, "NodePlaneTrackDeformData", node_free_standard_storage, node_copy_standard_storage);
-  ntype.get_compositor_operation = file_ns::get_compositor_operation;
 
   nodeRegisterType(&ntype);
 }

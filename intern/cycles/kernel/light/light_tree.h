@@ -154,8 +154,13 @@ ccl_device bool light_tree_sample(KernelGlobals kg,
     }
   }
 
-  /* Once we're at a leaf node, we can sample from the cluster of primitives inside.
-   * Right now, this is done by incrementing the CDF by the PDF.
+  /* Special case where there's only a single light. */
+  if (knode->num_prims == 1) {
+    return light_sample<in_volume_segment>(
+        kg, -knode->child_index, randu, randv, P, path_flag, ls);
+  }
+
+  /* Right now, sampling is done by incrementing the CDF by the PDF.
    * However, we first need to calculate the total importance so that we can normalize the CDF. */
   float total_emitter_importance = 0.0f;
   for (int i = 0; i < knode->num_prims; i++) {
@@ -163,11 +168,10 @@ ccl_device bool light_tree_sample(KernelGlobals kg,
     total_emitter_importance += light_tree_emitter_importance(kg, P, N, prim_index);
   }
 
-  /* to-do: need to handle a case when total importance is 0.*/
+  /* to-do: need to handle a case when total importance is 0. */
   if (total_emitter_importance == 0.0f) {
-
+    return false;
   }
-
 
   /* Once we have the total importance, we can normalize the CDF and sample it. */
   const float inv_total_importance = 1 / total_emitter_importance;

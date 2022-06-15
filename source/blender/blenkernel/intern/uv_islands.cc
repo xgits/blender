@@ -257,13 +257,21 @@ static MeshPrimitive *find_fill_border(const MeshVertex &v1,
                                        const MeshVertex &v2,
                                        const MeshVertex &v3)
 {
+  printf("find primitive containing (%lld,%lld,%lld)\n", v1.v, v2.v, v3.v);
   for (MeshEdge *edge : v1.edges) {
     for (MeshPrimitive *primitive : edge->primitives) {
+      printf("- try primitive %lld containing (%lld,%lld,%lld)\n",
+             primitive->index,
+             primitive->vertices[0].vertex->v,
+             primitive->vertices[1].vertex->v,
+             primitive->vertices[2].vertex->v);
       if (primitive->has_vertex(v1) && primitive->has_vertex(v2) && primitive->has_vertex(v3)) {
+        printf("- found primitive\n");
         return primitive;
       }
     }
   }
+  printf("- No primitive found\n");
   return nullptr;
 }
 /**
@@ -461,13 +469,17 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
     }
 
     int border_insert = corner.first->index;
-    int border_next = corner.second->index;
     border.remove(border_insert);
-    if (border_next != 0) {
+
+    int border_next = corner.second->index;
+    if (border_next < border_insert) {
+      border_insert--;
+    }
+    else {
       border_next--;
     }
     border.remove(border_next);
-    border_insert = min_ii(border_insert, border.edges.size() - 1);
+
     border.edges.insert(border_insert, new_border_edges);
 
     border.update_indexes(border_index);
@@ -507,6 +519,7 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
     if (num_iterations == 1) {
       printf("Last iteration\n");
     }
+    validate_border();
     std::optional<UVBorderCorner> extension_corner = sharpest_border_corner(*this);
     if (!extension_corner.has_value()) {
       break;

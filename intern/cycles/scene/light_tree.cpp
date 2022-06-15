@@ -118,7 +118,7 @@ LightTree::LightTree(const vector<LightTreePrimitive> &prims, Scene *scene, uint
   scene_ = scene;
   max_lights_in_leaf_ = max_lights_in_leaf;
 
-  vector<LightTreePrimitiveInfo> build_data(prims.size());
+  vector<LightTreePrimitiveInfo> build_data;
   for (int i = 0; i < prims.size(); i++) {
     LightTreePrimitiveInfo prim_info;
     prim_info.bbox = prims[i].calculate_bbox(scene);
@@ -235,7 +235,6 @@ LightTreeBuildNode *LightTree::recursive_build(vector<LightTreePrimitiveInfo> &p
     }
     else {
       int first_prim_offset = ordered_prims.size();
-      /* to-do: reduce this? */
       for (int i = start; i < end; i++) {
         int prim_num = primitive_info[i].prim_num;
         ordered_prims.push_back(prims_[prim_num]);

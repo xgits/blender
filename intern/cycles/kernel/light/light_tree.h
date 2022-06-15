@@ -37,7 +37,9 @@ ccl_device float light_tree_node_importance(const float3 P,
   /* to-do: compare this with directly using fmaxf and cosf. */
   /* Avoid using cosine until needed. */
   const float theta_prime = fmaxf(theta_i - theta_u, 0);
-  if (theta_prime >= theta_e) {
+  /* to-do: this is also a rough heuristic to see if any contribution is possible.
+   * In the paper, this is only theta_e, but this seems to be off for point lights. */
+  if (theta_prime >= theta_o + theta_e) {
     return 0;
   }
   const float cos_theta_prime = cosf(theta_prime);
@@ -127,6 +129,7 @@ ccl_device bool light_tree_sample(KernelGlobals kg,
   /* Also keep track of the probability of traversing to a given node, */
   /* so that we can scale our PDF accordingly later. */
   int index = 0;
+  *pdf_factor = 1.0f;
 
   /* to-do: is it better to generate a new random sample for each step of the traversal? */
   float tree_u = path_state_rng_1D(kg, rng_state, 1);
@@ -137,8 +140,8 @@ ccl_device bool light_tree_sample(KernelGlobals kg,
     const ccl_global KernelLightTreeNode *left = &kernel_tex_fetch(__light_tree_nodes, index + 1);
     const ccl_global KernelLightTreeNode *right = &kernel_tex_fetch(__light_tree_nodes, knode->child_index);
 
-    const float left_importance{light_tree_cluster_importance(kg, P, N, left)};
-    const float right_importance{light_tree_cluster_importance(kg, P, N, right)};
+    const float left_importance = light_tree_cluster_importance(kg, P, N, left);
+    const float right_importance = light_tree_cluster_importance(kg, P, N, right);
     const float left_probability = left_importance / (left_importance + right_importance);
 
     if (tree_u < left_probability) {
@@ -159,20 +162,27 @@ ccl_device bool light_tree_sample(KernelGlobals kg,
     const int prim_index = -knode->child_index + i;
     total_emitter_importance += light_tree_emitter_importance(kg, P, N, prim_index);
   }
-  const float inv_total_importance = 1 / total_emitter_importance;
+
+  /* to-do: need to handle a case when total importance is 0.*/
+  if (total_emitter_importance == 0.0f) {
+
+  }
 
 
   /* Once we have the total importance, we can normalize the CDF and sample it. */
+  const float inv_total_importance = 1 / total_emitter_importance;
   float emitter_cdf = 0.0f;
   for (int i = 0; i < knode->num_prims; i++) {
     const int prim_index = -knode->child_index + i;
     /* to-do: is there any way to cache these values, so that recalculation isn't needed?
      * At the very least, we can maybe store the total importance during light tree construction
      * so that the first for loop isn't necessary. */
-    const float emitter_pdf{light_tree_emitter_importance(kg, P, N, prim_index)};
-    emitter_cdf += emitter_pdf * inv_total_importance;
+    const float emitter_pdf = light_tree_emitter_importance(kg, P, N, prim_index) *
+                              inv_total_importance;
+    emitter_cdf += emitter_pdf;
     if (tree_u < emitter_cdf) {
       *pdf_factor *= emitter_pdf;
+      assert(*pdf_factor != 0.0f);
       return light_sample<in_volume_segment>(kg, prim_index, randu, randv, P, path_flag, ls);
     }
   }
@@ -195,6 +205,7 @@ ccl_device bool light_tree_sample_from_position(KernelGlobals kg,
   float pdf_factor;
   bool ret = light_tree_sample<false>(
       kg, rng_state, randu, randv, time, N, P, bounce, path_flag, ls, &pdf_factor);
+  assert(pdf_factor != 0.0f);
   ls->pdf *= pdf_factor;
   return ret;
 }

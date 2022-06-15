@@ -43,6 +43,7 @@
 #include "DNA_camera_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_userdef_types.h"
 #include "DNA_world_types.h"
 
 #include "ED_gpencil.h"
@@ -1228,6 +1229,10 @@ static void drw_engines_enable_editors(void)
 
 static bool is_compositor_enabled(void)
 {
+  if (!U.experimental.use_realtime_compositor) {
+    return false;
+  }
+
   if (!(DST.draw_ctx.v3d->shading.flag & V3D_SHADING_COMPOSITOR)) {
     return false;
   }

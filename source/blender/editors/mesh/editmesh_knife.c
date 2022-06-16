@@ -1355,12 +1355,18 @@ static void knife_bvh_raycast_cb(void *userdata,
 #endif
 
   if (isect && dist < hit->dist) {
+    madd_v3_v3v3fl(hit->co, ray->origin, ray->direction, dist);
+
+    /* Discard clipped points. */
+    if (RV3D_CLIPPING_ENABLED(kcd->vc.v3d, kcd->vc.rv3d) &&
+        ED_view3d_clipping_test(kcd->vc.rv3d, hit->co, false)) {
+      return;
+    }
+
     hit->dist = dist;
     hit->index = index;
 
     copy_v3_v3(hit->no, ltri[0]->f->no);
-
-    madd_v3_v3v3fl(hit->co, ray->origin, ray->direction, dist);
 
     kcd->bvh.looptris = em->looptris;
     copy_v2_v2(kcd->bvh.uv, uv);
@@ -4672,6 +4678,7 @@ static int knifetool_modal(bContext *C, wmOperator *op, const wmEvent *event)
       case MOUSEMOVE: /* Mouse moved somewhere to select another loop. */
         if (kcd->mode != MODE_PANNING) {
           knifetool_update_mval_i(kcd, event->mval);
+          knife_update_header(C, op, kcd);
 
           if (kcd->is_drag_hold) {
             if (kcd->totlinehit >= 2) {
@@ -4754,6 +4761,7 @@ static int knifetool_modal(bContext *C, wmOperator *op, const wmEvent *event)
     /* We don't really need to update mval,
      * but this happens to be the best way to refresh at the moment. */
     knifetool_update_mval_i(kcd, event->mval);
+    knife_update_header(C, op, kcd);
   }
 
   /* Keep going until the user confirms. */

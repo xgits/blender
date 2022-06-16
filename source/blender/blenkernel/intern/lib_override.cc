@@ -21,8 +21,10 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
+#include "BKE_anim_data.h"
 #include "BKE_armature.h"
 #include "BKE_collection.h"
+#include "BKE_fcurve.h"
 #include "BKE_global.h"
 #include "BKE_idtype.h"
 #include "BKE_key.h"
@@ -88,7 +90,9 @@ BLI_INLINE void lib_override_object_posemode_transfer(ID *id_dst, ID *id_src)
 }
 
 /** Get override data for a given ID. Needed because of our beloved shape keys snowflake. */
-BLI_INLINE IDOverrideLibrary *lib_override_get(Main *bmain, ID *id, ID **r_owner_id)
+BLI_INLINE const IDOverrideLibrary *lib_override_get(const Main *bmain,
+                                                     const ID *id,
+                                                     const ID **r_owner_id)
 {
   if (r_owner_id != nullptr) {
     *r_owner_id = id;
@@ -96,7 +100,9 @@ BLI_INLINE IDOverrideLibrary *lib_override_get(Main *bmain, ID *id, ID **r_owner
   if (id->flag & LIB_EMBEDDED_DATA_LIB_OVERRIDE) {
     const IDTypeInfo *id_type = BKE_idtype_get_info_from_id(id);
     if (id_type->owner_get != nullptr) {
-      ID *owner_id = id_type->owner_get(bmain, id);
+      /* The #IDTypeInfo::owner_get callback should not modify the arguments, so casting away const
+       * is okay. */
+      const ID *owner_id = id_type->owner_get(const_cast<Main *>(bmain), const_cast<ID *>(id));
       if (r_owner_id != nullptr) {
         *r_owner_id = owner_id;
       }
@@ -105,6 +111,15 @@ BLI_INLINE IDOverrideLibrary *lib_override_get(Main *bmain, ID *id, ID **r_owner
     BLI_assert_msg(0, "IDTypeInfo of liboverride-embedded ID with no owner getter");
   }
   return id->override_library;
+}
+
+BLI_INLINE IDOverrideLibrary *lib_override_get(Main *bmain, ID *id, ID **r_owner_id)
+{
+  /* Reuse the implementation of the const access function, which does not change the arguments.
+   * Add const explicitly to make it clear to the compiler to avoid just calling this function. */
+  return const_cast<IDOverrideLibrary *>(lib_override_get(const_cast<const Main *>(bmain),
+                                                          const_cast<const ID *>(id),
+                                                          const_cast<const ID **>(r_owner_id)));
 }
 
 IDOverrideLibrary *BKE_lib_override_library_init(ID *local_id, ID *reference_id)
@@ -267,7 +282,7 @@ static ID *lib_override_library_create_from(Main *bmain,
 
 /* TODO: This could be simplified by storing a flag in #IDOverrideLibrary
  * during the diffing process? */
-bool BKE_lib_override_library_is_user_edited(ID *id)
+bool BKE_lib_override_library_is_user_edited(const ID *id)
 {
 
   if (!ID_IS_OVERRIDE_LIBRARY(id)) {
@@ -281,8 +296,8 @@ bool BKE_lib_override_library_is_user_edited(ID *id)
     return false;
   }
 
-  LISTBASE_FOREACH (IDOverrideLibraryProperty *, op, &id->override_library->properties) {
-    LISTBASE_FOREACH (IDOverrideLibraryPropertyOperation *, opop, &op->operations) {
+  LISTBASE_FOREACH (const IDOverrideLibraryProperty *, op, &id->override_library->properties) {
+    LISTBASE_FOREACH (const IDOverrideLibraryPropertyOperation *, opop, &op->operations) {
       if ((opop->flag & IDOVERRIDE_LIBRARY_FLAG_IDPOINTER_MATCH_REFERENCE) != 0) {
         continue;
       }
@@ -297,14 +312,41 @@ bool BKE_lib_override_library_is_user_edited(ID *id)
   return false;
 }
 
-bool BKE_lib_override_library_is_system_defined(Main *bmain, ID *id)
+bool BKE_lib_override_library_is_system_defined(const Main *bmain, const ID *id)
 {
-
   if (ID_IS_OVERRIDE_LIBRARY(id)) {
-    ID *override_owner_id;
+    const ID *override_owner_id;
     lib_override_get(bmain, id, &override_owner_id);
     return (override_owner_id->override_library->flag & IDOVERRIDE_LIBRARY_FLAG_SYSTEM_DEFINED) !=
            0;
+  }
+  return false;
+}
+
+bool BKE_lib_override_library_property_is_animated(const ID *id,
+                                                   const IDOverrideLibraryProperty *override_prop,
+                                                   const PropertyRNA *override_rna_prop,
+                                                   const int rnaprop_index)
+{
+  AnimData *anim_data = BKE_animdata_from_id(id);
+  if (anim_data != nullptr) {
+    struct FCurve *fcurve;
+    char *index_token_start = const_cast<char *>(
+        RNA_path_array_index_token_find(override_prop->rna_path, override_rna_prop));
+    if (index_token_start != nullptr) {
+      const char index_token_start_backup = *index_token_start;
+      *index_token_start = '\0';
+      fcurve = BKE_animadata_fcurve_find_by_rna_path(
+          anim_data, override_prop->rna_path, rnaprop_index, nullptr, nullptr);
+      *index_token_start = index_token_start_backup;
+    }
+    else {
+      fcurve = BKE_animadata_fcurve_find_by_rna_path(
+          anim_data, override_prop->rna_path, 0, nullptr, nullptr);
+    }
+    if (fcurve != nullptr) {
+      return true;
+    }
   }
   return false;
 }
@@ -963,8 +1005,8 @@ static void lib_override_overrides_group_tag_recursive(LibOverrideGroupTagData *
       continue;
     }
 
-    Library *reference_lib = lib_override_get(bmain, id_owner, nullptr)->reference->lib;
-    ID *to_id_reference = lib_override_get(bmain, to_id, nullptr)->reference;
+    const Library *reference_lib = lib_override_get(bmain, id_owner, nullptr)->reference->lib;
+    const ID *to_id_reference = lib_override_get(bmain, to_id, nullptr)->reference;
     if (to_id_reference->lib != reference_lib) {
       /* We do not override data-blocks from other libraries, nor do we process them. */
       continue;
@@ -2410,7 +2452,7 @@ static int lib_override_sort_libraries_func(LibraryIDLinkCallbackData *cb_data)
   if (id != nullptr && ID_IS_LINKED(id) && id->lib != id_owner->lib) {
     const int owner_library_indirect_level = ID_IS_LINKED(id_owner) ? id_owner->lib->temp_index :
                                                                       0;
-    if (owner_library_indirect_level > 200) {
+    if (owner_library_indirect_level > 100) {
       CLOG_ERROR(&LOG,
                  "Levels of indirect usages of libraries is way too high, there are most likely "
                  "dependency loops, skipping further building loops (involves at least '%s' from "
@@ -2420,6 +2462,16 @@ static int lib_override_sort_libraries_func(LibraryIDLinkCallbackData *cb_data)
                  id->name,
                  id->lib->filepath);
       return IDWALK_RET_NOP;
+    }
+    if (owner_library_indirect_level > 90) {
+      CLOG_WARN(
+          &LOG,
+          "Levels of indirect usages of libraries is suspiciously too high, there are most likely "
+          "dependency loops (involves at least '%s' from '%s' and '%s' from '%s')",
+          id_owner->name,
+          id_owner->lib->filepath,
+          id->name,
+          id->lib->filepath);
     }
 
     if (owner_library_indirect_level >= id->lib->temp_index) {
@@ -2654,11 +2706,12 @@ IDOverrideLibraryProperty *BKE_lib_override_library_property_get(IDOverrideLibra
 bool BKE_lib_override_rna_property_find(PointerRNA *idpoin,
                                         const IDOverrideLibraryProperty *library_prop,
                                         PointerRNA *r_override_poin,
-                                        PropertyRNA **r_override_prop)
+                                        PropertyRNA **r_override_prop,
+                                        int *r_index)
 {
   BLI_assert(RNA_struct_is_ID(idpoin->type) && ID_IS_OVERRIDE_LIBRARY(idpoin->data));
-  return RNA_path_resolve_property(
-      idpoin, library_prop->rna_path, r_override_poin, r_override_prop);
+  return RNA_path_resolve_property_full(
+      idpoin, library_prop->rna_path, r_override_poin, r_override_prop, r_index);
 }
 
 void lib_override_library_property_copy(IDOverrideLibraryProperty *op_dst,

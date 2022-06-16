@@ -104,8 +104,10 @@ typedef struct DRWSubdivCache {
   bool optimal_display;
   bool use_custom_loop_normals;
 
-  /* Coordinates used to evaluate patches for UVs, positions, and normals. */
+  /* Coordinates used to evaluate patches for positions and normals. */
   struct GPUVertBuf *patch_coords;
+  /* Coordinates used to evaluate patches for attributes. */
+  struct GPUVertBuf *corner_patch_coords;
   /* Coordinates used to evaluate patches for the face centers (or face dots) in edit-mode. */
   struct GPUVertBuf *fdots_patch_coords;
 
@@ -183,8 +185,7 @@ void draw_subdiv_cache_free(DRWSubdivCache *cache);
 
 /** \} */
 
-void DRW_create_subdivision(const struct Scene *scene,
-                            struct Object *ob,
+void DRW_create_subdivision(struct Object *ob,
                             struct Mesh *mesh,
                             struct MeshBatchCache *batch_cache,
                             struct MeshBufferCache *mbc,

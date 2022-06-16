@@ -1,6 +1,4 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-
-# <pep8 compliant>
 from bpy.types import Menu
 
 
@@ -859,7 +857,7 @@ def brush_shared_settings(layout, context, brush, popover=False):
     if mode == 'SCULPT_CURVES':
         size = True
         strength = True
-        direction = brush.curves_sculpt_tool == 'GROW_SHRINK'
+        direction = brush.curves_sculpt_tool in {'GROW_SHRINK', 'SELECTION_PAINT'}
 
     ### Draw settings. ###
     ups = context.scene.tool_settings.unified_paint_settings
@@ -1318,7 +1316,11 @@ def brush_basic_gpencil_paint_settings(layout, context, brush, *, compact=False)
 
 
 def brush_basic_gpencil_sculpt_settings(layout, _context, brush, *, compact=False):
+    if brush is None:
+        return
     gp_settings = brush.gpencil_settings
+    if gp_settings is None:
+        return
     tool = brush.gpencil_sculpt_tool
 
     row = layout.row(align=True)

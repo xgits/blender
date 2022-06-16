@@ -156,6 +156,9 @@ ccl_device bool light_tree_sample(KernelGlobals kg,
 
   /* Special case where there's only a single light. */
   if (knode->num_prims == 1) {
+    if (UNLIKELY(light_select_reached_max_bounces(kg, -knode->child_index, bounce))) {
+      return false;
+    }
     return light_sample<in_volume_segment>(
         kg, -knode->child_index, randu, randv, P, path_flag, ls);
   }
@@ -187,6 +190,9 @@ ccl_device bool light_tree_sample(KernelGlobals kg,
     if (tree_u < emitter_cdf) {
       *pdf_factor *= emitter_pdf;
       assert(*pdf_factor != 0.0f);
+      if (UNLIKELY(light_select_reached_max_bounces(kg, prim_index, bounce))) {
+        return false;
+      }
       return light_sample<in_volume_segment>(kg, prim_index, randu, randv, P, path_flag, ls);
     }
   }

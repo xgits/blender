@@ -177,14 +177,15 @@ LightTreeBuildNode *LightTree::recursive_build(vector<LightTreePrimitiveInfo> &p
   /* Var(X) = E[X^2] - E[X]^2 */
   float energy_variance = (energy_squared_total / num_prims) - (energy_total / num_prims) * (energy_total / num_prims);
 
-  if (num_prims == 1) {
+  /* to-do: find a better way to handle when all centroids overlap. */
+  if (num_prims == 1 || centroid_bounds.area() == 0.0f) {
     int first_prim_offset = ordered_prims.size();
     /* to-do: reduce this? */
     for (int i = start; i < end; i++) {
       int prim_num = primitive_info[i].prim_num;
       ordered_prims.push_back(prims_[prim_num]);
     }
-    node->init_leaf(start, num_prims, node_bbox, node_bcone, energy_total, energy_variance);
+    node->init_leaf(first_prim_offset, num_prims, node_bbox, node_bcone, energy_total, energy_variance);
   }
   else {
     /* Find the best place to split the primitives into 2 nodes. 
@@ -239,7 +240,7 @@ LightTreeBuildNode *LightTree::recursive_build(vector<LightTreePrimitiveInfo> &p
         int prim_num = primitive_info[i].prim_num;
         ordered_prims.push_back(prims_[prim_num]);
       }
-      node->init_leaf(start, num_prims, node_bbox, node_bcone, energy_total, energy_variance);
+      node->init_leaf(first_prim_offset, num_prims, node_bbox, node_bcone, energy_total, energy_variance);
     }
   }
 
@@ -263,6 +264,11 @@ void LightTree::split_saoh(const BoundBox &centroid_bbox,
   /* Check each dimension to find the minimum splitting cost. */
   min_cost = FLT_MAX;
   for (int dim = 0; dim < 3; dim++) {
+    /* If the centroid bounding box is 0 along a given dimension, skip it. */
+    if (centroid_bbox.size()[dim] == 0.0f) {
+      continue;
+    }
+
     const float inv_extent = 1 / (centroid_bbox.size()[dim]);
     
     /* Fill in buckets with primitives. */

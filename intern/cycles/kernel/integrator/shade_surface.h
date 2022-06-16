@@ -117,7 +117,7 @@ ccl_device_forceinline void integrate_surface_direct_light(KernelGlobals kg,
 
     if (kg->__data.integrator.use_light_tree) {
       if (!light_tree_sample_from_position(
-              kg, rng_state, light_u, light_v, sd->time, sd->N, sd->P, bounce, path_flag, &ls)) {
+              kg, rng_state, light_u, light_v, sd->time, sd->P, sd->N, bounce, path_flag, &ls)) {
         return;
       }
     }

@@ -4,12 +4,28 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device float light_tree_bounding_box_angle(KernelGlobals kg,
-                                               const float3 bbox_min,
+ccl_device float light_tree_bounding_box_angle(const float3 bbox_min,
                                                const float3 bbox_max,
-                                               const float3 P)
+                                               const float3 P,
+                                               const float3 point_to_centroid)
 {
-  return 0;
+  /* Want to iterate through all 8 possible points of the bounding box. */
+  float theta_u = 0;
+  float3 corners[8];
+  corners[0] = bbox_min;
+  corners[1] = make_float3(bbox_min.x, bbox_min.y, bbox_max.z);
+  corners[2] = make_float3(bbox_min.x, bbox_max.y, bbox_min.z);
+  corners[3] = make_float3(bbox_min.x, bbox_max.y, bbox_max.z);
+  corners[4] = make_float3(bbox_max.x, bbox_min.y, bbox_min.z);
+  corners[5] = make_float3(bbox_max.x, bbox_min.y, bbox_max.z);
+  corners[6] = make_float3(bbox_max.x, bbox_max.y, bbox_min.z);
+  corners[7] = bbox_max;
+  for (int i = 0; i < 8; ++i) {
+    float3 point_to_corner = normalize(P - corners[i]);
+    const float cos_theta_u = dot(point_to_centroid, point_to_corner);
+    theta_u = fmaxf(fast_acosf(cos_theta_u), theta_u);
+  }
+  return theta_u;
 }
 
 /* This is the general function for calculating the importance of either a cluster or an emitter.
@@ -25,14 +41,13 @@ ccl_device float light_tree_node_importance(const float3 P,
                                             const float energy)
 {
   const float3 centroid = 0.5f * bbox_min + 0.5f * bbox_max;
-  const float3 point_to_centroid = P - centroid;
-  const float3 point_to_bbox_max = P - bbox_max;
+  const float3 point_to_centroid = normalize(P - centroid);
 
-  const float distance_squared = len_squared(point_to_centroid);
+  const float distance_squared = len_squared(P - centroid);
 
   const float theta = fast_acosf(dot(bcone_axis, -point_to_centroid));
   const float theta_i = fast_acosf(dot(point_to_centroid, N));
-  const float theta_u = fast_acosf(dot(point_to_centroid, point_to_bbox_max));
+  const float theta_u = light_tree_bounding_box_angle(bbox_min, bbox_max, P, point_to_centroid);
 
   /* to-do: compare this with directly using fmaxf and cosf. */
   /* Avoid using cosine until needed. */

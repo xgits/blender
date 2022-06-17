@@ -68,7 +68,8 @@ static std::optional<UVBorderCorner> sharpest_border_corner(UVIsland &island)
   return result;
 }
 
-struct FanSegment {
+/** The inner edge of a fan. */
+struct InnerEdge {
   MeshPrimitive *primitive;
   /* UVs order are already applied. So uvs[0] mathes primitive->vertices[vert_order[0]]/ */
   float2 uvs[3];
@@ -76,13 +77,11 @@ struct FanSegment {
 
   struct {
     bool found : 1;
-    bool should_be_added : 1;
   } flags;
 
-  FanSegment(MeshPrimitive *primitive, MeshVertex *vertex) : primitive(primitive)
+  InnerEdge(MeshPrimitive *primitive, MeshVertex *vertex) : primitive(primitive)
   {
     flags.found = false;
-    flags.should_be_added = false;
 
     /* Reorder so the first edge starts with the given vertex. */
     if (primitive->vertices[1].vertex == vertex) {
@@ -107,7 +106,7 @@ struct FanSegment {
 // TODO: should have InnerEdges and Primitives to reduce complexity in algorithm
 struct Fan {
   /* Blades of the fan. */
-  Vector<FanSegment> segments;
+  Vector<InnerEdge> inner_edges;
 
   Fan(MeshVertex &vertex)
   {
@@ -128,12 +127,16 @@ struct Fan {
           if (edge == current_edge || (edge->vert1 != &vertex && edge->vert2 != &vertex)) {
             continue;
           }
-          segments.append(FanSegment(other, &vertex));
+          inner_edges.append(InnerEdge(other, &vertex));
           current_edge = edge;
           previous_primitive = other;
           stop = true;
           break;
         }
+      }
+      if (stop == false) {
+        printf("unknown how to create the fan for vert %lld\n", vertex.v);
+        break;
       }
       if (stop_primitive == previous_primitive) {
         break;
@@ -144,8 +147,8 @@ struct Fan {
   int count_num_to_add() const
   {
     int result = 0;
-    for (const FanSegment &segment : segments) {
-      if (!segment.flags.found) {
+    for (const InnerEdge &fan_edge : inner_edges) {
+      if (!fan_edge.flags.found) {
         result++;
       }
     }
@@ -154,15 +157,15 @@ struct Fan {
 
   void mark_already_added_segments(const UVVertex &uv_vertex)
   {
-    for (FanSegment &segment : segments) {
-      segment.flags.found = false;
-      const MeshVertex *v0 = segment.primitive->vertices[segment.vert_order[0]].vertex;
-      const MeshVertex *v1 = segment.primitive->vertices[segment.vert_order[1]].vertex;
+    for (InnerEdge &fan_edge : inner_edges) {
+      fan_edge.flags.found = false;
+      const MeshVertex *v0 = fan_edge.primitive->vertices[fan_edge.vert_order[0]].vertex;
+      const MeshVertex *v1 = fan_edge.primitive->vertices[fan_edge.vert_order[1]].vertex;
       for (const UVEdge *edge : uv_vertex.uv_edges) {
         const MeshVertex *e0 = edge->vertices[0]->vertex;
         const MeshVertex *e1 = edge->vertices[1]->vertex;
         if ((e0 == v0 && e1 == v1) || (e0 == v1 && e1 == v0)) {
-          segment.flags.found = true;
+          fan_edge.flags.found = true;
           break;
         }
       }
@@ -171,18 +174,18 @@ struct Fan {
 
   void init_uv_coordinates(UVVertex &uv_vertex, const UVIsland &island)
   {
-    for (FanSegment &segment : segments) {
-      int2 test_edge = int2(segment.primitive->vertices[segment.vert_order[0]].vertex->v,
-                            segment.primitive->vertices[segment.vert_order[1]].vertex->v);
+    for (InnerEdge &fan_edge : inner_edges) {
+      int2 test_edge = int2(fan_edge.primitive->vertices[fan_edge.vert_order[0]].vertex->v,
+                            fan_edge.primitive->vertices[fan_edge.vert_order[1]].vertex->v);
       for (const UVPrimitive &uv_primitive : island.uv_primitives) {
         for (UVEdge *edge : uv_primitive.edges) {
           int2 o(edge->vertices[0]->vertex->v, edge->vertices[1]->vertex->v);
           if ((test_edge.x == o.x && test_edge.y == o.y) ||
               (test_edge.x == o.y && test_edge.y == o.x)) {
-            segment.uvs[0] = uv_vertex.uv;
+            fan_edge.uvs[0] = uv_vertex.uv;
             for (int i = 0; i < 2; i++) {
               if (edge->vertices[i]->uv == uv_vertex.uv) {
-                segment.uvs[1] = edge->vertices[1 - i]->uv;
+                fan_edge.uvs[1] = edge->vertices[1 - i]->uv;
                 break;
               }
             }
@@ -191,24 +194,24 @@ struct Fan {
       }
     }
 
-    segments.last().uvs[2] = segments.first().uvs[1];
-    for (int i = 0; i < segments.size() - 1; i++) {
-      segments[i].uvs[2] = segments[i + 1].uvs[1];
+    inner_edges.last().uvs[2] = inner_edges.first().uvs[1];
+    for (int i = 0; i < inner_edges.size() - 1; i++) {
+      inner_edges[i].uvs[2] = inner_edges[i + 1].uvs[1];
     }
   }
 };
 
 static void print(const Fan &fan)
 {
-  for (const FanSegment &segment : fan.segments) {
+  for (const InnerEdge &fan_edge : fan.inner_edges) {
     for (int i = 0; i < 3; i++) {
-      int vert_index = segment.vert_order[i];
+      int vert_index = fan_edge.vert_order[i];
       printf("%lld(%f,%f) ",
-             segment.primitive->vertices[vert_index].vertex->v,
-             segment.uvs[i].x,
-             segment.uvs[i].y);
+             fan_edge.primitive->vertices[vert_index].vertex->v,
+             fan_edge.uvs[i].x,
+             fan_edge.uvs[i].y);
     }
-    printf(" %d\n", segment.flags.found);
+    printf(" %d\n", fan_edge.flags.found);
   }
 }
 
@@ -398,7 +401,7 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
       float2 new_uv = corner.uv(factor);
 
       // Find an segment that contains the 'current edge'.
-      for (FanSegment &segment : fan.segments) {
+      for (InnerEdge &segment : fan.inner_edges) {
         if (segment.flags.found) {
           continue;
         }

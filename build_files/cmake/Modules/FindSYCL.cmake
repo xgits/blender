@@ -37,6 +37,7 @@ FIND_PROGRAM(SYCL_COMPILER
   PATH_SUFFIXES
     bin
   NO_CMAKE_FIND_ROOT_PATH
+  NAMES_PER_DIR
 )
 
 # NOTE: No clang++ here so that we do not pick up a system-wide CLang

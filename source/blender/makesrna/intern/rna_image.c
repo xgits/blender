@@ -1225,6 +1225,14 @@ static void rna_def_image(BlenderRNA *brna)
                            "Use 16 bits per channel to lower the memory usage during rendering");
   RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_gpu_texture_update");
 
+  prop = RNA_def_property(srna, "seamfix_iter", PROP_INT, PROP_NONE);
+  RNA_def_property_ui_text(prop,
+                           "Seam-fix",
+                           "Number of iterations to perform when extracting additional pixels "
+                           "during UV seam fixing. Each iteration will dilate the previous mask. "
+                           "Resolution of the mask is 256x256");
+  RNA_def_property_ui_range(prop, 1, 100, 1, 1);
+
   /* multiview */
   prop = RNA_def_property(srna, "views_format", PROP_ENUM, PROP_NONE);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);

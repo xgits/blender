@@ -741,26 +741,27 @@ static bool dilate_y(UVIslandsMask &islands_mask)
   return changed;
 }
 
-void UVIslandsMask::dilate()
+void UVIslandsMask::dilate(int max_iterations)
 {
 #ifdef DEBUG_SVG
   std::ofstream of;
   of.open("/tmp/dilate.svg");
   svg_header(of);
-  int index = 0;
 #endif
-  while (true) {
+
+  int index = 0;
+  while (index < max_iterations) {
     bool changed = dilate_x(*this);
     changed |= dilate_y(*this);
     if (!changed) {
       break;
     }
 #ifdef DEBUG_SVG
-    svg(of, *this, index++);
+    svg(of, *this, index);
 #endif
+    index++;
   }
 #ifdef DEBUG_SVG
-  svg(of, *this, index);
   svg_footer(of);
   of.close();
 #endif

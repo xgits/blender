@@ -29,25 +29,6 @@ namespace blender::bke::pbvh::pixels {
  */
 constexpr bool USE_WATERTIGHT_CHECK = false;
 
-/* -------------------------------------------------------------------- */
-
-/** \name UV Islands
- * \{ */
-
-/** Build UV islands from PBVH primitives. */
-static uv_islands::UVIslands build_uv_islands(uv_islands::MeshData &mesh_data)
-{
-  uv_islands::UVIslands islands(mesh_data);
-  uv_islands::UVIslandsMask uv_masks(float2(0.0, 0.0), ushort2(256, 256));
-  uv_masks.add(islands);
-  uv_masks.dilate();
-  islands.extract_borders();
-  islands.extend_borders(uv_masks, mesh_data);
-  return islands;
-}
-
-/** \} */
-
 /**
  * Calculate the delta of two neighbor UV coordinates in the given image buffer.
  */
@@ -76,6 +57,8 @@ static float2 calc_barycentric_delta_x(const ImBuf *image_buffer,
 
 static void extract_barycentric_pixels(UDIMTilePixels &tile_data,
                                        const ImBuf *image_buffer,
+                                       const uv_islands::UVIslandsMask &uv_mask,
+                                       const int64_t uv_island_index,
                                        const int64_t uv_primitive_index,
                                        const float2 uvs[3],
                                        const int minx,
@@ -96,12 +79,13 @@ static void extract_barycentric_pixels(UDIMTilePixels &tile_data,
       barycentric_weights_v2(uvs[0], uvs[1], uvs[2], uv, barycentric_weights);
 
       const bool is_inside = barycentric_inside_triangle_v2(barycentric_weights);
-      if (!start_detected && is_inside) {
+      const bool is_masked = uv_mask.is_masked(uv_island_index, uv);
+      if (!start_detected && is_inside && is_masked) {
         start_detected = true;
         pixel_row.start_image_coordinate = ushort2(x, y);
         pixel_row.start_barycentric_coord = float2(barycentric_weights.x, barycentric_weights.y);
       }
-      else if (start_detected && !is_inside) {
+      else if (start_detected && (!is_inside || !is_masked)) {
         break;
       }
     }
@@ -133,6 +117,7 @@ struct EncodePixelsUserData {
   Vector<PBVHNode *> *nodes;
   const MLoopUV *ldata_uv;
   const uv_islands::UVIslands *uv_islands;
+  const uv_islands::UVIslandsMask *uv_masks;
 };
 
 static void do_encode_pixels(void *__restrict userdata,
@@ -144,6 +129,8 @@ static void do_encode_pixels(void *__restrict userdata,
   ImageUser image_user = *data->image_user;
   PBVHNode *node = (*data->nodes)[n];
   NodeData *node_data = static_cast<NodeData *>(node->pixels.node_data);
+  const uv_islands::UVIslandsMask &uv_masks = *data->uv_masks;
+
   LISTBASE_FOREACH (ImageTile *, tile, &data->image->tiles) {
     image::ImageTileWrapper image_tile(tile);
     image_user.tile = image_tile.get_tile_number();
@@ -159,6 +146,7 @@ static void do_encode_pixels(void *__restrict userdata,
     for (int pbvh_node_prim_index = 0; pbvh_node_prim_index < node->totprim;
          pbvh_node_prim_index++) {
       int64_t geom_prim_index = node->prim_indices[pbvh_node_prim_index];
+      int64_t uv_island_index = 0;
       for (const uv_islands::UVIsland &island : data->uv_islands->islands) {
         for (const uv_islands::UVPrimitive &uv_primitive : island.uv_primitives) {
           if (uv_primitive.primitive->index != geom_prim_index) {
@@ -189,9 +177,18 @@ static void do_encode_pixels(void *__restrict userdata,
               image_buffer, uvs, minx, miny);
 
           /* Extract the pixels. */
-          extract_barycentric_pixels(
-              tile_data, image_buffer, uv_prim_index, uvs, minx, miny, maxx, maxy);
+          extract_barycentric_pixels(tile_data,
+                                     image_buffer,
+                                     uv_masks,
+                                     uv_island_index,
+                                     uv_prim_index,
+                                     uvs,
+                                     minx,
+                                     miny,
+                                     maxx,
+                                     maxy);
         }
+        uv_island_index++;
       }
     }
     BKE_image_release_ibuf(image, image_buffer, nullptr);
@@ -335,9 +332,18 @@ static void update_pixels(PBVH *pbvh, Mesh *mesh, Image *image, ImageUser *image
   if (ldata_uv == nullptr) {
     return;
   }
+
   uv_islands::MeshData mesh_data(
       pbvh->looptri, pbvh->totprim, pbvh->totvert, pbvh->mloop, ldata_uv);
-  uv_islands::UVIslands islands = build_uv_islands(mesh_data);
+  uv_islands::UVIslands islands(mesh_data);
+
+  // TODO: Currenly uv_masks only supports a single udim tile. We should create one for each tile.
+  uv_islands::UVIslandsMask uv_masks(float2(0.0, 0.0), ushort2(256, 256));
+  uv_masks.add(islands);
+  uv_masks.dilate(image->seamfix_iter);
+
+  islands.extract_borders();
+  islands.extend_borders(uv_masks, mesh_data);
   update_geom_primitives(*pbvh, mesh_data);
 
   EncodePixelsUserData user_data;
@@ -347,6 +353,7 @@ static void update_pixels(PBVH *pbvh, Mesh *mesh, Image *image, ImageUser *image
   user_data.ldata_uv = ldata_uv;
   user_data.nodes = &nodes_to_update;
   user_data.uv_islands = &islands;
+  user_data.uv_masks = &uv_masks;
 
   TaskParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, true, nodes_to_update.size());

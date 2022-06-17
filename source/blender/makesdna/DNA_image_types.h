@@ -157,7 +157,13 @@ typedef struct Image {
   short gpu_pass;
   short gpu_layer;
   short gpu_view;
-  char _pad2[4];
+
+  /* Number of iterations to perform to extract a mask for uv seam fixing. */
+  // TODO: unit in 1/256 of the resolution each iteration performs a dilate. This should be changed
+  // in the final implementation to actual pixels or something else. This need more thought.
+  short seamfix_iter;
+
+  char _pad2[2];
 
   /** Deprecated. */
   struct PackedFile *packedfile DNA_DEPRECATED;

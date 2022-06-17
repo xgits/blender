@@ -11,6 +11,7 @@
 #include "BLI_float3x3.hh"
 #include "BLI_math.h"
 #include "BLI_math_vec_types.hh"
+#include "BLI_rect.h"
 #include "BLI_vector.hh"
 
 #include "DNA_meshdata_types.h"
@@ -94,6 +95,16 @@ struct MeshPrimitive {
       }
     }
     return nullptr;
+  }
+
+  rctf uv_bounds() const
+  {
+    rctf result;
+    BLI_rctf_init_minmax(&result);
+    for (const MeshUVVert &uv_vertex : vertices) {
+      BLI_rctf_do_minmax_v(&result, uv_vertex.uv);
+    }
+    return result;
   }
 };
 
@@ -892,33 +903,39 @@ struct UVIslandsMask {
 
   void add(short island_index, const UVIsland &island)
   {
-    for (const UVEdge &edge : island.uv_edges) {
-      add(island_index, edge);
+    for (const UVPrimitive &uv_primitive : island.uv_primitives) {
+      const MeshPrimitive *mesh_primitive = uv_primitive.primitive;
+
+      rctf uv_bounds = mesh_primitive->uv_bounds();
+      rcti buffer_bounds;
+      buffer_bounds.xmin = max_ii(floor((uv_bounds.xmin - udim_offset.x) * resolution.x), 0);
+      buffer_bounds.xmax = min_ii(ceil((uv_bounds.xmax - udim_offset.x) * resolution.x),
+                                  resolution.x - 1);
+      buffer_bounds.ymin = max_ii(floor((uv_bounds.ymin - udim_offset.y) * resolution.y), 0);
+      buffer_bounds.ymax = min_ii(ceil((uv_bounds.ymax - udim_offset.y) * resolution.y),
+                                  resolution.y - 1);
+
+      for (int y = buffer_bounds.ymin; y < buffer_bounds.ymax + 1; y++) {
+        for (int x = buffer_bounds.xmin; x < buffer_bounds.xmax + 1; x++) {
+          float2 uv(float(x) / resolution.x, float(y) / resolution.y);
+          float3 weights;
+          barycentric_weights_v2(mesh_primitive->vertices[0].uv,
+                                 mesh_primitive->vertices[1].uv,
+                                 mesh_primitive->vertices[2].uv,
+                                 uv,
+                                 weights);
+          if (!barycentric_inside_triangle_v2(weights)) {
+            continue;
+          }
+
+          uint64_t offset = resolution.x * y + x;
+          mask[offset] = island_index;
+        }
+      }
     }
   }
 
-  void add(short island_index, const UVEdge &edge)
-  {
-    float2 p;
-    for (int i = 0; i < 10; i++) {
-      float f = i / 10.0f;
-      interp_v2_v2v2(p, edge.vertices[0]->uv, edge.vertices[1]->uv, f);
-      add(island_index, p);
-    }
-  }
-
-  void add(short island_index, const float2 uv)
-  {
-    float2 udim_corrected_uv = uv - udim_offset;
-    ushort2 mask_uv(udim_corrected_uv.x * resolution.x, udim_corrected_uv.y * resolution.y);
-    if (mask_uv.x < 0 || mask_uv.y < 0 || mask_uv.x >= resolution.x || mask_uv.y >= resolution.y) {
-      return;
-    }
-    uint64_t offset = resolution.x * mask_uv.y + mask_uv.x;
-    mask[offset] = island_index;
-  }
-
-  void dilate();
+  void dilate(int max_iterations);
 
   void print() const
   {

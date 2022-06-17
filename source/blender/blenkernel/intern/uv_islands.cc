@@ -108,8 +108,18 @@ struct Fan {
   /* Blades of the fan. */
   Vector<InnerEdge> inner_edges;
 
+  struct {
+    /**
+     * Do all segments of the fan make a full fan, or are there parts missing. Non manifold meshes
+     * can have missing parts.
+     */
+    bool full : 1;
+
+  } flags;
+
   Fan(MeshVertex &vertex)
   {
+    flags.full = true;
     MeshEdge *current_edge = vertex.edges[0];
     MeshPrimitive *stop_primitive = current_edge->primitives[0];
     MeshPrimitive *previous_primitive = stop_primitive;
@@ -136,6 +146,7 @@ struct Fan {
       }
       if (stop == false) {
         printf("unknown how to create the fan for vert %lld\n", vertex.v);
+        flags.full = false;
         break;
       }
       if (stop_primitive == previous_primitive) {
@@ -333,6 +344,10 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
 
   UVVertex *uv_vertex = corner.second->get_uv_vertex(0);
   Fan fan(*(uv_vertex->vertex));
+  if (!fan.flags.full) {
+    printf("TODO: Unknown how to handle non-manifold meshes.\n");
+    return;
+  }
   fan.init_uv_coordinates(*uv_vertex, island);
   fan.mark_already_added_segments(*uv_vertex);
   print(fan);
@@ -482,7 +497,9 @@ static void extend_at_vert(UVIsland &island, UVBorderCorner &corner, const MeshD
       border_next--;
     }
     border.remove(border_next);
-
+    for (UVBorderEdge &edge : new_border_edges) {
+      edge.flags.extendable = false;
+    }
     border.edges.insert(border_insert, new_border_edges);
 
     border.update_indexes(border_index);
@@ -499,8 +516,10 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
   // exit when no corner could be found.
 #ifdef DEBUG_SVG
   int step = 0;
+  std::stringstream filename;
+  filename << "/tmp/extend." << island_index << ".svg";
   std::ofstream of;
-  of.open("/tmp/extend.svg");
+  of.open(filename.str());
   svg_header(of);
   svg(of, *this, step++);
   for (UVBorder &border : borders) {
@@ -519,8 +538,9 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
   int num_iterations = 99999;
   while (num_iterations) {
     printf("**iterations left %d**\n", num_iterations);
-    if (num_iterations == 1) {
-      printf("Last iteration\n");
+    if (step == 366) {
+      printf("Debug iteration\n");
+      // break;
     }
     validate_border();
     std::optional<UVBorderCorner> extension_corner = sharpest_border_corner(*this);

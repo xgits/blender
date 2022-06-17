@@ -731,7 +731,7 @@ struct UVIsland {
 
 /* Debug functions to export to a SVG file. */
 void svg_header(std::ostream &ss);
-void svg(std::ostream &ss, const UVIsland &islands, int step);
+void svg(std::ostream &ss, const UVIsland &islands, int step, int64_t first_new_prim_index);
 void svg(std::ostream &ss, const UVIslands &islands, int step);
 void svg(std::ostream &ss, const UVPrimitive &primitive);
 void svg(std::ostream &ss, const UVPrimitive &primitive, int step);

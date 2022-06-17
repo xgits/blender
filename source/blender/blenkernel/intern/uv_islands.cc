@@ -521,11 +521,8 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
   std::ofstream of;
   of.open(filename.str());
   svg_header(of);
-  svg(of, *this, step++);
-  for (UVBorder &border : borders) {
-    svg(of, border, step);
-  }
-  step++;
+  uint64_t first_new_prim_index = uv_primitives.size();
+  svg(of, *this, step++, first_new_prim_index);
 #endif
 
   int64_t border_index = 0;
@@ -562,11 +559,8 @@ void UVIsland::extend_border(const UVIslandsMask &mask,
     extension_corner->second->flags.extendable = false;
     num_iterations--;
 #ifdef DEBUG_SVG
-    svg(of, *this, step++);
-    for (UVBorder &border : borders) {
-      svg(of, border, step);
-    }
-    step++;
+    svg(of, *this, step++, first_new_prim_index);
+    first_new_prim_index = uv_primitives.size();
 #endif
   }
 #ifdef DEBUG_SVG
@@ -845,14 +839,23 @@ void svg(std::ostream &ss, const UVEdge &edge)
      << "\"/>\n";
 }
 
-void svg(std::ostream &ss, const UVIsland &island, int step)
+void svg(std::ostream &ss, const UVIsland &island, int step, int64_t first_new_prim_index)
 {
   ss << "<g transform=\"translate(" << step * 1024 << " 0)\">\n";
   ss << "  <g fill=\"none\">\n";
 
   /* Inner edges */
   ss << "    <g stroke=\"grey\" stroke-width=\"1\">\n";
-  for (const UVPrimitive &primitive : island.uv_primitives) {
+  for (const UVPrimitive &primitive :
+       Span<const UVPrimitive>(island.uv_primitives.begin(), first_new_prim_index)) {
+    svg(ss, primitive);
+  }
+  ss << "     </g>\n";
+
+  ss << "    <g stroke=\"grey\" fill=\"green\" stroke-width=\"1\">\n";
+  for (const UVPrimitive &primitive :
+       Span<const UVPrimitive>(&island.uv_primitives[first_new_prim_index],
+                               island.uv_primitives.size() - first_new_prim_index)) {
     svg(ss, primitive);
   }
   ss << "     </g>\n";
@@ -986,6 +989,7 @@ void svg(std::ostream &ss, const UVPrimitive &primitive)
     svg_coords(ss, edge.get_uv_vertex(0)->uv);
   }
   ss << "\"/>\n";
+#if 0
 
   float2 center(0.0, 0.0);
   for (const UVBorderEdge &edge : border.edges) {
@@ -1005,6 +1009,7 @@ void svg(std::ostream &ss, const UVPrimitive &primitive)
     ss << edge.get_uv_vertex(0)->vertex->v;
     ss << "</text>\n";
   }
+#endif
 }
 
 void svg(std::ostream &ss, const UVPrimitive &primitive, int step)

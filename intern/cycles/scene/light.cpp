@@ -532,16 +532,24 @@ void LightManager::device_update_distribution(Device *,
     /* to-do: this pdf is probably going to need adjustment if a light tree is used. */
     kintegrator->num_all_lights = num_lights;
 
-    if (trianglearea > 0.0f) {
-      kintegrator->pdf_triangles = 1.0f / trianglearea;
-      if (num_lights)
-        kintegrator->pdf_triangles *= 0.5f;
+    /* pdf_lights is used when sampling lights, and assumes that
+     * the light has been sampled through the light distribution.
+     * Therefore, we override it for now and adjust the pdf manually in the light tree.*/
+    if (scene->integrator->get_use_light_tree()) {
+      kintegrator->pdf_lights = 1.0f;
     }
+    else {
+      if (trianglearea > 0.0f) {
+        kintegrator->pdf_triangles = 1.0f / trianglearea;
+        if (num_lights)
+          kintegrator->pdf_triangles *= 0.5f;
+      }
 
-    if (num_lights) {
-      kintegrator->pdf_lights = 1.0f / num_lights;
-      if (trianglearea > 0.0f)
-        kintegrator->pdf_lights *= 0.5f;
+      if (num_lights) {
+        kintegrator->pdf_lights = 1.0f / num_lights;
+        if (trianglearea > 0.0f)
+          kintegrator->pdf_lights *= 0.5f;
+      }
     }
 
     kintegrator->use_lamp_mis = use_lamp_mis;

@@ -169,15 +169,6 @@ ccl_device bool light_tree_sample(KernelGlobals kg,
     }
   }
 
-  /* Special case where there's only a single light. */
-  if (knode->num_prims == 1) {
-    if (UNLIKELY(light_select_reached_max_bounces(kg, -knode->child_index, bounce))) {
-      return false;
-    }
-    return light_sample<in_volume_segment>(
-        kg, -knode->child_index, randu, randv, P, path_flag, ls);
-  }
-
   /* Right now, sampling is done by incrementing the CDF by the PDF.
    * However, we first need to calculate the total importance so that we can normalize the CDF. */
   float total_emitter_importance = 0.0f;
@@ -196,15 +187,12 @@ ccl_device bool light_tree_sample(KernelGlobals kg,
   float emitter_cdf = 0.0f;
   for (int i = 0; i < knode->num_prims; i++) {
     const int prim_index = -knode->child_index + i;
-    /* to-do: is there any way to cache these values, so that recalculation isn't needed?
-     * At the very least, we can maybe store the total importance during light tree construction
-     * so that the first for loop isn't necessary. */
+    /* to-do: is there any way to cache these values, so that recalculation isn't needed? */
     const float emitter_pdf = light_tree_emitter_importance(kg, P, N, prim_index) *
                               inv_total_importance;
     emitter_cdf += emitter_pdf;
     if (tree_u < emitter_cdf) {
       *pdf_factor *= emitter_pdf;
-      assert(*pdf_factor != 0.0f);
       if (UNLIKELY(light_select_reached_max_bounces(kg, prim_index, bounce))) {
         return false;
       }

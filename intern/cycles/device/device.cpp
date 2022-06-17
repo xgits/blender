@@ -364,8 +364,8 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
         int orig_cpu_threads = (threads) ? threads : TaskScheduler::max_concurrency();
         int cpu_threads = max(orig_cpu_threads - (subdevices.size() - 1), size_t(0));
 
-        VLOG(1) << "CPU render threads reduced from " << orig_cpu_threads << " to " << cpu_threads
-                << ", to dedicate to GPU.";
+        VLOG_INFO << "CPU render threads reduced from " << orig_cpu_threads << " to "
+                  << cpu_threads << ", to dedicate to GPU.";
 
         if (cpu_threads >= 1) {
           DeviceInfo cpu_device = device;
@@ -377,7 +377,7 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
         }
       }
       else {
-        VLOG(1) << "CPU render threads disabled for interactive render.";
+        VLOG_INFO << "CPU render threads disabled for interactive render.";
         continue;
       }
     }

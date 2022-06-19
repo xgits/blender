@@ -4621,6 +4621,7 @@ static void registerShaderNodes()
   register_node_type_sh_uvmap();
   register_node_type_sh_uvalongstroke();
   register_node_type_sh_eevee_specular();
+  register_node_type_sh_bsdf_pjsh_skin(); //dian.liu
 
   register_node_type_sh_output_light();
   register_node_type_sh_output_material();

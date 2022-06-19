@@ -52,6 +52,7 @@ set(SRC
   nodes/node_shader_curves.cc
   nodes/node_shader_displacement.cc
   nodes/node_shader_eevee_specular.cc
+  nodes/node_shader_bsdf_pjsh_skin.cc
   nodes/node_shader_emission.cc
   nodes/node_shader_fresnel.cc
   nodes/node_shader_gamma.cc

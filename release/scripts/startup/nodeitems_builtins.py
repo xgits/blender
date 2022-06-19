@@ -372,6 +372,7 @@ shader_node_categories = [
         NodeItem("ShaderNodeVolumeScatter", poll=eevee_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeVolumePrincipled"),
         NodeItem("ShaderNodeEeveeSpecular", poll=object_eevee_shader_nodes_poll),
+        NodeItem("ShaderNodeBsdfPJSHSkin", poll=object_eevee_shader_nodes_poll), #dian.liu
         NodeItem("ShaderNodeBsdfHairPrincipled", poll=object_cycles_shader_nodes_poll)
     ]),
     ShaderNodeCategory("SH_NEW_TEXTURE", "Texture", items=[
